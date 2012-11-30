@@ -1,10 +1,10 @@
 package main
 
 import (
-"code.google.com/p/goweb/goweb"
-"vbucketserver/conf"
-"vbucketserver/client"
-"fmt"
+	"code.google.com/p/goweb/goweb"
+	"fmt"
+	"vbucketserver/client"
+	"vbucketserver/conf"
 )
 
 func HandleUpLoadConfig(c *goweb.Context, cp *conf.ParsedInfo) {
@@ -32,9 +32,7 @@ func HandleDeadvBuckets(c *goweb.Context, cp *conf.ParsedInfo) {
 			fmt.Println("got error", err)
 			return
 		}
-        _, mp := cp.HandleDeadVbuckets(dvi, 1)
-	    clientHandler.PushNewConfig(mp)
+		_, mp := cp.HandleDeadVbuckets(dvi, 1)
+		clientHandler.PushNewConfig(mp)
 	}
 }
-
-
