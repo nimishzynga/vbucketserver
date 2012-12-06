@@ -33,6 +33,7 @@ func HandleDeadvBuckets(c *goweb.Context, cp *conf.ParsedInfo) {
 			return
 		}
 		_, mp := cp.HandleDeadVbuckets(dvi, 1)
-		clientHandler.PushNewConfig(mp)
+        //need to call it on client info
+		clientHandler.PushNewConfig(cp, mp)
 	}
 }

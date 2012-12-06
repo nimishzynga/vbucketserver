@@ -6,7 +6,10 @@ import (
 	"net/http"
 	cl "vbucketserver/client"
 	"vbucketserver/conf"
+    "log"
 )
+
+import _ "net/http/pprof"
 
 func Init(cp conf.ParsedInfo) {
 	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
@@ -42,10 +45,14 @@ func Init(cp conf.ParsedInfo) {
 
 func main() {
 	var cp conf.ParsedInfo
-	var h cl.Client
+    h := cl.NewClient()
 	var port = flag.String("port", ":14000", "Port number for VBS")
+    flag.Parse()
 	goweb.ConfigureDefaultFormatters()
 	Init(cp)
-	go cl.HandleTcp(&h, &cp, *port)
+	go cl.HandleTcp(h, &cp, *port)
+    go func() {
+        log.Println(http.ListenAndServe("localhost:6060", nil))
+    }()
 	http.ListenAndServe(":8080", goweb.DefaultHttpHandler)
 }

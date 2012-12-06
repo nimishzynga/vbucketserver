@@ -47,10 +47,10 @@ func (c Conf) generatevBucketMap() (*[][]int, bool) {
 	}
 	return &confMap, false
 }
-
+/*
 func activateState(m []stateEntry) {
 }
-
+*/
 func (cp *ParsedInfo) generateStatemap() []stateEntry {
     m := cp.V.VBucketMap
 	stateMap := []stateEntry{}
@@ -73,11 +73,12 @@ func (cp *ParsedInfo) generateVBAmap() {
 	serverList := cp.C.Servers
 	vbaMap := make(map[string]VbaEntry)
 	var entry VbaEntry
+    var ok bool
 	for i := range m {
 		server := serverList[m[i][0]]
 		for j := 1; j < len(m[i]); j++ {
 			hashKey := server + serverList[m[i][j]]
-			if entry, ok := vbaMap[hashKey]; ok {
+			if entry, ok = vbaMap[hashKey]; ok {
 				entry.VbId = append(entry.VbId, i)
 			} else {
 				entry = VbaEntry{
@@ -101,7 +102,7 @@ func (cp *ParsedInfo) GenMap(con *Conf) {
 		cp.V.ServerList = con.Servers
 		cp.C = *con //update the config
 		stateMap := cp.generateStatemap()
-		activateState(stateMap)
+		//activateState(stateMap)
 		cp.generateVBAmap()
 		//cl.PushNewConfig(cp.VbaInfo)
 		cp.updateMaxCapacity(con.Capacity, len(con.Servers))
@@ -204,6 +205,7 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, ser int) ([]stateE
 			}
 		}
 	}
+    cp.VbaInfo = oldVbaMap
 	//need to update old map
 	return changeStateMap, changeVbaMap
 }

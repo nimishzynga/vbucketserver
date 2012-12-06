@@ -9,7 +9,7 @@ import (
 
 //information per client structure
 type ClientInfo struct {
-	C     chan []byte
+	C     chan byte
 	State int
 }
 
@@ -22,7 +22,7 @@ type ClientInfoMap struct {
 //information of all the clients
 type Client struct {
 	Started bool
-	Con     sync.Cond
+	Con     *sync.Cond
 	Moxi,Vba, Cli   ClientInfoMap
 }
 
@@ -48,4 +48,26 @@ type ConfigMsg struct {
 	HeartBeatTime int
 }
 
+type ConfigVbaMsg struct {
+	Config  []conf.VbaEntry
+	HeartBeatTime int
+}
+
+func NewClientInfoMap() ClientInfoMap {
+    k := ClientInfoMap{
+        Ma    : make(map[string]*ClientInfo),
+    }
+    return k
+}
+
+func NewClient() *Client {
+    cl := &Client{
+        Started :  false,
+        Con     :  sync.NewCond(new(sync.Mutex)),
+        Moxi     : NewClientInfoMap(),
+        Vba     :  NewClientInfoMap(),
+        Cli     :  NewClientInfoMap(),
+    }
+    return cl
+}
 
