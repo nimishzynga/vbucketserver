@@ -18,8 +18,8 @@ const (
 	STATE_INIT_RES
 	STATE_CONFIG
 	STATE_CONFIG_RES
-    STATE_UPDATE_CONFIG
-    STATE_CONFIG_RES_NXT
+	STATE_UPDATE_CONFIG
+	STATE_CONFIG_RES_NXT
 	STATE_ALIVE
 )
 
@@ -30,9 +30,10 @@ const (
 	MSG_ALIVE
 	MSG_CAPACITY
 	MSG_CONFIG
-	MSG_INIT_STR  = "INIT"
-	MSG_OK_STR    = "OK"
-	MSG_ALIVE_STR = "ALIVE"
+	MSG_INIT_STR   = "INIT"
+	MSG_OK_STR     = "OK"
+	MSG_ALIVE_STR  = "ALIVE"
+	MSG_CONFIG_STR = "CONFIG"
 )
 
 //other constants
@@ -41,13 +42,21 @@ const (
 	HEADER_SIZE    = 4
 	HBTIME         = 30
 	MAX_TIMEOUT    = 1
-	VBA_WAIT_TIME  = 60
-	CLIENT_VBA     = "Vba"
-	CLIENT_MOXI    = "Moxi"
+	VBA_WAIT_TIME  = 10
+	CLIENT_VBA     = "VBA"
+	CLIENT_MOXI    = "MOXI"
 	CLIENT_CLI     = "Cli"
 	CLIENT_UNKNOWN = "Unknown"
 	CLIENT_PCNT    = 1
 	CONF_FILE_PATH = "/tmp/file"
+)
+
+//return status
+const (
+	STATUS_INVALID = iota
+	STATUS_CONT
+	STATUS_ERR
+	STATUS_SUCCESS
 )
 
 func HandleTcp(c *Client, cp *conf.ParsedInfo, s string) {
@@ -83,7 +92,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 	for m := range ch {
 		l := new(bytes.Buffer)
 		var ln int32 = int32(len(m))
-		binary.Write(l, binary.LittleEndian, ln)
+		binary.Write(l, binary.BigEndian, ln)
 		conn.Write(l.Bytes())
 		_, err := conn.Write(m)
 		if err != nil {
@@ -93,96 +102,98 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 	}
 }
 
-const (
-	STATUS_INVALID = iota
-	STATUS_CONT
-	STATUS_ERR
-	STATUS_SUCCESS
-)
-
 func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
-	var state int = STATE_INIT
-	data := []byte{}
-	fullData := []byte{}
-	var length int32
-	currTimeouts := 0
-	defer conn.Close()
-	m := &RecvMsg{}
-	c1 := make(chan error)
-	c2 := make(chan []byte)
-	c3 := make(chan byte)
+    var state int = STATE_INIT
+    data := []byte{}
+    fullData := []byte{}
+    var length int32
+    currTimeouts := 0
+    defer func() {
+        conn.Close()
+        fmt.Println("disconnecting client", getIpAddr(conn))
+    }()
+    m := &RecvMsg{}
+    hasData := false
+    c1 := make(chan error)
+    c2 := make(chan []byte)
+    c3 := make(chan byte)
 
-	go func() {
-		d := make([]byte, RECV_BUF_LEN)
-		for {
-			n, err := conn.Read(d)
-			if err != nil {
-				c1 <- err
-			} else {
-				c2 <- d[:n]
-			}
-		}
-	}()
+    go func() {
+        d := make([]byte, RECV_BUF_LEN)
+        for {
+            n, err := conn.Read(d)
+            if err != nil {
+                c1 <- err
+            } else {
+                c2 <- d[:n]
+            }
+        }
+    }()
 
-	if s := getClientType(conn, co); s == CLIENT_UNKNOWN {
-		handleMsg(nil, conn, state, c, co, cp, c3)
-	}
+    if s := getClientType(conn, co); s == CLIENT_UNKNOWN {
+        handleMsg(nil, conn, &state, c, co, cp, c3)
+    }
 
-	for {
-		select {
-		case <-c1:
-			fmt.Println("error on socket")
-			return
-		case data = <-c2:
-			currTimeouts = 0
-			fmt.Println("got data")
-		case <-c3:
-			if state >= STATE_CONFIG_RES {
-				state = STATE_UPDATE_CONFIG
-			}
-		case <-time.After(HBTIME * time.Second):
-			currTimeouts++
-			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
-				return
-			}
-			fmt.Println("timeout on socket", conn)
-			length = 0
-			fullData = fullData[:0]
-			continue
-		}
+    for {
+        select {
+        case <-c1:
+            fmt.Println("error on socket")
+            return
+        case data = <-c2:
+            currTimeouts = 0
+            fmt.Println("got data")
+            fullData = append(fullData, data...)
+        case <-c3:
+            if state >= STATE_CONFIG_RES {
+                state = STATE_UPDATE_CONFIG
+                hasData = true
+            }
+        case <-time.After(HBTIME * time.Second):
+            currTimeouts++
+            if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
+                return
+            }
+            fmt.Println("timeout on socket", conn)
+            length = 0
+            fullData = fullData[:0]
+            continue
+        }
 
-		fullData = append(fullData, data...)
-		n := len(fullData)
+        for {
+            if hasData == false {
+                n := len(fullData)
+                if length == 0 {
+                    if n > HEADER_SIZE {
+                        buf := bytes.NewBuffer(fullData)
+                        binary.Read(buf, binary.BigEndian, &length)
+                        if length > RECV_BUF_LEN {
+                            fmt.Println("Data size is more", length)
+                            return
+                        }
+                        fullData = fullData[HEADER_SIZE:]
+                        n -= HEADER_SIZE
+                    } else {
+                        break
+                    }
+                }
 
-		if length == 0 {
-			if n > HEADER_SIZE {
-				buf := bytes.NewBuffer(fullData)
-				binary.Read(buf, binary.LittleEndian, &length)
-				if length > RECV_BUF_LEN {
-					fmt.Println("Data size is more")
-					return
-				}
-				fullData = fullData[HEADER_SIZE:]
-				n -= HEADER_SIZE
-			} else {
-				continue
-			}
-		}
+                if n < int(length) {
+                    break
+                }
 
-		if n < int(length) {
-			continue
-		}
+                input := fullData[:length]
+                fullData = fullData[length:]
+                length = 0
 
-		input := fullData[:length]
-		fullData = fullData[length:]
-		length = 0
-
-		m, _ = parseMsg(input)
-		switch ret := handleMsg(m, conn, state, c, co, cp, c3); ret {
-		case STATUS_ERR:
-			return
-		}
-	}
+                m, _ = parseMsg(input)
+            }
+            switch ret := handleMsg(m, conn, &state, c, co, cp, c3); ret {
+                case STATUS_ERR:
+                    return
+            }
+            hasData = false
+        }
+    }
 }
 
 func parseMsg(b []byte) (*RecvMsg, error) {
@@ -196,14 +207,15 @@ func parseMsg(b []byte) (*RecvMsg, error) {
 	return m, err
 }
 
-func handleMsg(m *RecvMsg, c net.Conn, s int, ch chan []byte, co *Client,
+func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 	cp *conf.ParsedInfo, i chan byte) int {
-	switch s {
+	fmt.Println("state is", *s)
+	switch *s {
 	case STATE_INIT:
 		if m, err := getMsg(MSG_INIT); err == nil {
 			ch <- m
 		}
-		s = STATE_INIT_RES
+		*s = STATE_INIT_RES
 	case STATE_INIT_RES:
 		if m.Agent == CLIENT_MOXI || m.Agent == CLIENT_VBA {
 			Insert(c, i, co, m.Agent)
@@ -212,6 +224,10 @@ func handleMsg(m *RecvMsg, c net.Conn, s int, ch chan []byte, co *Client,
 				co.Con.Wait()
 			}
 			co.Con.L.Unlock()
+			index := getServerIndex(cp, getIpAddr(c))
+			si := cp.S[index]
+			si.NumberOfDisc = int16(m.Capacity)
+			cp.S[index] = si
 			//see if i can create an interface and handle it separately
 			if m, err := getMsg(MSG_CONFIG, cp, HBTIME, m.Agent, getIpAddr(c)); err == nil {
 				ch <- m
@@ -219,35 +235,37 @@ func handleMsg(m *RecvMsg, c net.Conn, s int, ch chan []byte, co *Client,
 		} else {
 			fmt.Println("CLI connected", m)
 		}
-		s = STATE_CONFIG_RES
+		*s = STATE_CONFIG_RES
 	case STATE_CONFIG_RES:
 		//this timeout is for alive messages
 		//need to handle timeout here
 		if m.Cmd == MSG_ALIVE_STR {
-			s = STATE_CONFIG_RES_NXT
+			*s = STATE_CONFIG_RES_NXT
 			return STATUS_SUCCESS
 		}
-		if m.Cmd != MSG_OK_STR {
+		if m.Status != MSG_OK_STR {
 			return STATUS_ERR
 		}
-		s = STATE_ALIVE
+		*s = STATE_ALIVE
+		fmt.Println("setting alive state")
 	case STATE_ALIVE:
 		//ignore the ok response here
-		if m.Cmd != MSG_ALIVE_STR || m.Cmd != MSG_OK_STR {
+		if m.Cmd != MSG_ALIVE_STR && m.Cmd != MSG_OK_STR {
 			return STATUS_ERR
 		} else {
 			fmt.Println("got alive message")
 		}
 	case STATE_UPDATE_CONFIG:
-		if m, err := getMsg(MSG_CONFIG, cp, HBTIME, getClientType(c, co), getIpAddr(c)); err == nil {
+        if m, err := getMsg(MSG_CONFIG, cp, HBTIME, getClientType(c, co),
+	        getIpAddr(c));err == nil {
 			ch <- m
 		}
-		s = STATE_CONFIG_RES
+		*s = STATE_CONFIG_RES
 	case STATE_CONFIG_RES_NXT:
-		if m.Cmd != MSG_OK_STR {
+		if m.Status != MSG_OK_STR {
 			return STATUS_ERR
 		}
-		s = STATE_ALIVE
+		*s = STATE_ALIVE
 	}
 	return STATUS_SUCCESS
 }

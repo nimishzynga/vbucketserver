@@ -8,39 +8,33 @@ import (
 	"vbucketserver/conf"
     "log"
 )
-
 import _ "net/http/pprof"
 
-func Init(cp conf.ParsedInfo) {
-	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
-		HandleUpLoadConfig(c, &cp)
+func Init(cp *conf.ParsedInfo, co *cl.Client) {
+
+    goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
+		HandleUpLoadConfig(c, cp)
 	})
 
 	goweb.MapFunc("/{version}/vbucketMap", func(c *goweb.Context) {
-		HandleVbucketMap(c, &cp)
+		HandleVbucketMap(c, cp)
 	})
 
 	goweb.MapFunc("/{version}/deadvBuckets", func(c *goweb.Context) {
-		HandleDeadvBuckets(c, &cp)
+		HandleDeadvBuckets(c, cp, co)
 	})
 
-	/*
-		goweb.MapFunc("/{version}/serverDown", func(c *goweb.Context) {
-	        handleServerDown(c, cp)
-	    })
+    goweb.MapFunc("/{version}/serverDown", func(c *goweb.Context) {
+        HandleServerDown(c, cp, co)
+    })
 
-		goweb.MapFunc("/{version}/serverAlive", func(c *goweb.Context) {
-	        handleServerAlive(c, cp)
-	    })
+    goweb.MapFunc("/{version}/serverAlive", func(c *goweb.Context) {
+        HandleServerAlive(c, cp)
+    })
 
-		goweb.MapFunc("/{version}/capacityUpdate", func(c *goweb.Context) {
-	        handleCapacityUpdate(c, cp)
-	    })
-
-	    goweb.MapFunc("/{version}/vmaConfig", func(c *goweb.Context) {
-	        handleVmaConfig(c, cp)
-	    })
-	*/
+    goweb.MapFunc("/{version}/capacityUpdate", func(c *goweb.Context) {
+        HandleCapacityUpdate(c, cp)
+    })
 }
 
 func main() {
@@ -49,10 +43,10 @@ func main() {
 	var port = flag.String("port", ":14000", "Port number for VBS")
     flag.Parse()
 	goweb.ConfigureDefaultFormatters()
-	Init(cp)
+	Init(&cp, h)
 	go cl.HandleTcp(h, &cp, *port)
     go func() {
-        log.Println(http.ListenAndServe("localhost:6060", nil))
+        log.Println(http.ListenAndServe(":8080", nil))
     }()
-	http.ListenAndServe(":8080", goweb.DefaultHttpHandler)
+	http.ListenAndServe(":6060", goweb.DefaultHttpHandler)
 }

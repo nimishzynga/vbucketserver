@@ -8,6 +8,7 @@ import (
 type ServerInfo struct {
 	currentVbuckets int16
 	maxVbuckets     int16
+    NumberOfDisc    int16
 }
 
 type Conf struct {
@@ -27,9 +28,10 @@ type VBucketInfo struct {
 }
 
 type DeadVbucketInfo struct {
-	Server  string
-	Active  []int
-	Replica []int
+	Server      string
+    DiscsFailed  int
+	Active      []int
+	Replica     []int
 }
 
 type VbaEntry struct {
@@ -42,6 +44,15 @@ type stateEntry struct {
 	server int
 	vbid   int
 	state  string
+}
+
+type ServerUpDownInfo struct {
+    Server string
+}
+
+type CapacityUpdateInfo struct {
+    Server      string
+    DiscAlive   int16
 }
 
 type ParsedInfo struct {

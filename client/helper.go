@@ -75,13 +75,13 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
             cp.M.RLock()
             defer cp.M.RUnlock()
             if agent == CLIENT_MOXI {
-                m := ConfigMsg{Config: cp.V, HeartBeatTime: t}
+                m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: cp.V, HeartBeatTime: t}
                 return json.Marshal(m)
             } else {
-                m := ConfigVbaMsg{HeartBeatTime: t}
+                m := ConfigVbaMsg{Cmd: MSG_CONFIG_STR, HeartBeatTime: t}
                 for _,entry := range cp.VbaInfo {
                     if entry.Source == ip {
-                        m.Config = append(m.Config, entry)
+                        m.Data = append(m.Data, entry)
                     }
                 }
                 return json.Marshal(m)
@@ -105,23 +105,37 @@ func waitForVBAs(c *conf.Conf, cp *conf.ParsedInfo, to int, co *Client) {
 }
 
 func getServerIndex(cp *conf.ParsedInfo, sr string) int {
+    fmt.Println("input server is",sr, "all are", cp.C.Servers)
     for s := range cp.C.Servers {
         if cp.C.Servers[s] == sr {
             return s
         }
     }
+    panic("server not found")
     return -1
 }
 
 //push the config to all the VBA's
 func PushNewConfig(co *Client, m map[string]conf.VbaEntry) {
+    ma := make(map[string]int)
     for _,en := range m {
-        co.Vba.Mu.Lock()
-        if val,ok := co.Vba.Ma[en.Source];ok {
-            val.C<-'a'
+        if len(en.VbId) > 0 {
+            co.Vba.Mu.Lock()
+            if _,o := ma[en.Source];o == false {
+                if val,ok := co.Vba.Ma[en.Source];ok {
+                    val.C<-'a'
+                }
+                ma[en.Source] = 1
+            }
+            co.Vba.Mu.Unlock()
         }
-        co.Vba.Mu.Unlock()
     }
+
+    co.Moxi.Mu.Lock()
+    for _,val := range co.Moxi.Ma {
+        val.C<-'a'
+    }
+    co.Moxi.Mu.Unlock()
 }
 
 //update the servers list with the connected servers
@@ -129,24 +143,25 @@ func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
 	v.Mu.RLock()
 	defer v.Mu.RUnlock()
 	connectedServs := []string{}
+        /*
 	for a := range c.Servers {
+        //Need to uncomment this
 		if _, ok := v.Ma[c.Servers[a]]; ok {
 			connectedServs = append(connectedServs, c.Servers[a])
-		}
 	}
+		}*/
+    connectedServs = c.Servers
     fmt.Println("connect servers are", connectedServs)
 	capacity := len(connectedServs) * 100 / len(c.Servers)
-    _= capacity
-    /*
-	if capacity < CLIENT_PCNT {
+
+    if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-		panic("Not enough server connected")
+		//panic("Not enough server connected")
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets
-		//    c.Capacity = capacity * 100/(int16)c.Capacity
+		c.Capacity = (int16(capacity) * c.Capacity)/100
 	}
-    */
 	return c
 }
 
@@ -155,7 +170,7 @@ func Insert(c net.Conn, ch chan byte, co *Client, a string) {
 	ip := getIpAddr(c)
 	if a == CLIENT_MOXI {
 		co.Moxi.Mu.Lock()
-		if co.Moxi.Ma[ip] != nil {
+		if co.Moxi.Ma[ip] == nil {
 			cf := &ClientInfo{C: ch}
 			co.Moxi.Ma[ip] = cf
 		} else {
@@ -163,7 +178,6 @@ func Insert(c net.Conn, ch chan byte, co *Client, a string) {
 		}
 		co.Moxi.Mu.Unlock()
 	} else {
-        println("dude, inserting here")
 		co.Vba.Mu.Lock()
 		if co.Vba.Ma[ip] == nil {
 			cf := &ClientInfo{C: ch}

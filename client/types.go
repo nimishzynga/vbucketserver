@@ -37,6 +37,7 @@ type RecvMsg struct {
 	Agent    string
 	Status   string
 	Vbuckets Vblist
+    Capacity int
 }
 
 type InitMsg struct {
@@ -44,12 +45,14 @@ type InitMsg struct {
 }
 
 type ConfigMsg struct {
-	Config  conf.VBucketInfo
+    Cmd     string
+	Data  conf.VBucketInfo
 	HeartBeatTime int
 }
 
 type ConfigVbaMsg struct {
-	Config  []conf.VbaEntry
+    Cmd     string
+	Data  []conf.VbaEntry
 	HeartBeatTime int
 }
 
