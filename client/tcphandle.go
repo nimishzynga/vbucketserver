@@ -34,6 +34,7 @@ const (
 	MSG_OK_STR     = "OK"
 	MSG_ALIVE_STR  = "ALIVE"
 	MSG_CONFIG_STR = "CONFIG"
+    MSG_FAIL_STR   = "FAIL"
 )
 
 //other constants
@@ -41,7 +42,7 @@ const (
 	RECV_BUF_LEN   = 1024
 	HEADER_SIZE    = 4
 	HBTIME         = 30
-	MAX_TIMEOUT    = 1
+	MAX_TIMEOUT    = 3
 	VBA_WAIT_TIME  = 10
 	CLIENT_VBA     = "VBA"
 	CLIENT_MOXI    = "MOXI"
@@ -111,6 +112,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
     defer func() {
         conn.Close()
         fmt.Println("disconnecting client", getIpAddr(conn))
+        RemoveConn(conn, co)
     }()
     m := &RecvMsg{}
     hasData := false
@@ -210,7 +212,14 @@ func parseMsg(b []byte) (*RecvMsg, error) {
 func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 	cp *conf.ParsedInfo, i chan byte) int {
 	fmt.Println("state is", *s)
-	switch *s {
+    //hack to work with MCS
+    if m != nil && m.Cmd == MSG_FAIL_STR {
+        mp := cp.HandleServerDown(m.Server)
+        //need to call it on client info
+        PushNewConfig(co, mp)
+        return STATUS_SUCCESS
+    }
+    switch *s {
 	case STATE_INIT:
 		if m, err := getMsg(MSG_INIT); err == nil {
 			ch <- m
@@ -224,10 +233,12 @@ func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 				co.Con.Wait()
 			}
 			co.Con.L.Unlock()
-			index := getServerIndex(cp, getIpAddr(c))
-			si := cp.S[index]
-			si.NumberOfDisc = int16(m.Capacity)
-			cp.S[index] = si
+            if m.Agent == CLIENT_VBA {
+                index := getServerIndex(cp, getIpAddr(c))
+                si := cp.S[index]
+                si.NumberOfDisc = int16(m.Capacity)
+                cp.S[index] = si
+            }
 			//see if i can create an interface and handle it separately
 			if m, err := getMsg(MSG_CONFIG, cp, HBTIME, m.Agent, getIpAddr(c)); err == nil {
 				ch <- m
@@ -250,7 +261,7 @@ func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 		fmt.Println("setting alive state")
 	case STATE_ALIVE:
 		//ignore the ok response here
-		if m.Cmd != MSG_ALIVE_STR && m.Cmd != MSG_OK_STR {
+        if m.Cmd != MSG_ALIVE_STR && m.Cmd != MSG_OK_STR {
 			return STATUS_ERR
 		} else {
 			fmt.Println("got alive message")

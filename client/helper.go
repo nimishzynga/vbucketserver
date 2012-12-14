@@ -17,6 +17,10 @@ func getIpAddr(c net.Conn) string {
     return ip
 }
 
+func getIpAddrWithPort(c net.Conn) string {
+    ip := c.RemoteAddr().String()
+    return ip
+}
 ///XXX:Put more validation checks for file inputs
 func parseInitialConfig(f string, cp *conf.ParsedInfo) *conf.Conf {
 	con := &conf.Conf{}
@@ -167,7 +171,7 @@ func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
 
 func Insert(c net.Conn, ch chan byte, co *Client, a string) {
 	/*XXX:close the older connection if exists*/
-	ip := getIpAddr(c)
+	ip := getIpAddrWithPort(c)
 	if a == CLIENT_MOXI {
 		co.Moxi.Mu.Lock()
 		if co.Moxi.Ma[ip] == nil {
@@ -187,4 +191,15 @@ func Insert(c net.Conn, ch chan byte, co *Client, a string) {
 		}
 		co.Vba.Mu.Unlock()
 	}
+}
+
+func RemoveConn(c net.Conn, co *Client) {
+    /*XXX:close the older connection if exists*/
+    ip := getIpAddr(c)
+    co.Moxi.Mu.Lock()
+    delete(co.Moxi.Ma, ip)
+    co.Moxi.Mu.Unlock()
+    co.Vba.Mu.Lock()
+    delete(co.Vba.Ma, ip)
+    co.Vba.Mu.Unlock()
 }

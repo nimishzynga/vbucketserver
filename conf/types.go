@@ -21,10 +21,10 @@ type Conf struct {
 }
 
 type VBucketInfo struct {
-	VBucketMap    [][]int
-	HashAlgorithm string
-	NumReplicas   int
-	ServerList    []string
+    VBucketMap    [][]int  `json:"vBucketMap"`
+    HashAlgorithm string   `json:"hashAlgorithm"`
+    NumReplicas   int      `json:"numReplicas"`
+    ServerList    []string `json:"serverList"`
 }
 
 type DeadVbucketInfo struct {
