@@ -112,13 +112,13 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
     defer func() {
         conn.Close()
         fmt.Println("disconnecting client", getIpAddr(conn))
-        RemoveConn(conn, co)
+        //RemoveConn(conn, co)
     }()
     m := &RecvMsg{}
     hasData := false
     c1 := make(chan error)
     c2 := make(chan []byte)
-    c3 := make(chan byte)
+    c3 := make(chan byte, 10)
 
     go func() {
         d := make([]byte, RECV_BUF_LEN)

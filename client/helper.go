@@ -78,6 +78,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
             ip, _ := args[3].(string)
             cp.M.RLock()
             defer cp.M.RUnlock()
+            fmt.Println("agent is", agent)
             if agent == CLIENT_MOXI {
                 m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: cp.V, HeartBeatTime: t}
                 return json.Marshal(m)
@@ -171,7 +172,7 @@ func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
 
 func Insert(c net.Conn, ch chan byte, co *Client, a string) {
 	/*XXX:close the older connection if exists*/
-	ip := getIpAddrWithPort(c)
+	ip := getIpAddr(c)
 	if a == CLIENT_MOXI {
 		co.Moxi.Mu.Lock()
 		if co.Moxi.Ma[ip] == nil {
