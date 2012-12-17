@@ -1,16 +1,18 @@
-package clientHandler
+package clientHandler1
 
 import (
-    "sync"
-    "vbucketserver/conf"
+	"net"
+	"sync"
+	"vbucketserver/conf"
 )
 
 //file contains the struct for client handling
 
 //information per client structure
 type ClientInfo struct {
-	C     chan byte
+	C     chan string
 	State int
+	Conn  net.Conn
 }
 
 //information for all the clients of a particular type
@@ -21,9 +23,9 @@ type ClientInfoMap struct {
 
 //information of all the clients
 type Client struct {
-	Started bool
-	Con     *sync.Cond
-	Moxi,Vba, Cli   ClientInfoMap
+	Started        bool
+	Con            *sync.Cond
+	Moxi, Vba, Cli ClientInfoMap
 }
 
 type Vblist struct {
@@ -36,9 +38,9 @@ type RecvMsg struct {
 	Cmd      string
 	Agent    string
 	Status   string
-    Server   string
+	Server   string
 	Vbuckets Vblist
-    Capacity int
+	Capacity int
 }
 
 type InitMsg struct {
@@ -46,32 +48,31 @@ type InitMsg struct {
 }
 
 type ConfigMsg struct {
-    Cmd     string
-	Data  conf.VBucketInfo
+	Cmd           string
+	Data          conf.VBucketInfo
 	HeartBeatTime int
 }
 
 type ConfigVbaMsg struct {
-    Cmd     string
-	Data  []conf.VbaEntry
+	Cmd           string
+	Data          []conf.VbaEntry
 	HeartBeatTime int
 }
 
 func NewClientInfoMap() ClientInfoMap {
-    k := ClientInfoMap{
-        Ma    : make(map[string]*ClientInfo),
-    }
-    return k
+	k := ClientInfoMap{
+		Ma: make(map[string]*ClientInfo),
+	}
+	return k
 }
 
 func NewClient() *Client {
-    cl := &Client{
-        Started :  false,
-        Con     :  sync.NewCond(new(sync.Mutex)),
-        Moxi     : NewClientInfoMap(),
-        Vba     :  NewClientInfoMap(),
-        Cli     :  NewClientInfoMap(),
-    }
-    return cl
+	cl := &Client{
+		Started: false,
+		Con:     sync.NewCond(new(sync.Mutex)),
+		Moxi:    NewClientInfoMap(),
+		Vba:     NewClientInfoMap(),
+		Cli:     NewClientInfoMap(),
+	}
+	return cl
 }
-

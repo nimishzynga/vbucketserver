@@ -1,13 +1,30 @@
 package conf
 
 import (
-	"fmt"
-    "math/rand"
+	l4g "code.google.com/p/log4go"
+	"math/rand"
 )
+
+const (
+	DEAD_NODE_IP = "0.0.0.0:11211"
+)
+
+var Log l4g.Logger
+
+func SetLogFile(file string, ll string) {
+	Log = make(l4g.Logger)
+	level := l4g.WARNING
+	if ll == "info" {
+		level = l4g.INFO
+	} else if ll == "debug" {
+		level = l4g.DEBUG
+	}
+	Log.AddFilter("file", level, l4g.NewFileLogWriter(file, false))
+}
 
 func (c Conf) generatevBucketMap() (*[][]int, *[]int16, bool) {
 	serv := len(c.Servers)
-    capacityMap := make([]int16, len(c.Servers))
+	capacityMap := make([]int16, len(c.Servers))
 	maxActive := int(c.Vbuckets) / serv
 	if int(c.Vbuckets)%serv > 0 {
 		maxActive += 1
@@ -28,7 +45,7 @@ func (c Conf) generatevBucketMap() (*[][]int, *[]int16, bool) {
 	for i := 0; i < int(c.Vbuckets); i++ {
 		s := i / maxActive
 		confMap[i][0] = s
-        capacityMap[s]++
+		capacityMap[s]++
 		//distribute the replicas
 		for j := 1; j <= int(c.Replica); j++ {
 			for {
@@ -44,7 +61,7 @@ func (c Conf) generatevBucketMap() (*[][]int, *[]int16, bool) {
 					countReplica[lastserver] = c
 				}
 				confMap[i][j] = lastserver
-                capacityMap[lastserver]++
+				capacityMap[lastserver]++
 				break
 			}
 		}
@@ -57,7 +74,7 @@ func (cp *ParsedInfo) generateVBAmap() {
 	serverList := cp.C.Servers
 	vbaMap := make(map[string]VbaEntry)
 	var entry VbaEntry
-    var ok bool
+	var ok bool
 	for i := range m {
 		server := serverList[m[i][0]]
 		for j := 1; j < len(m[i]); j++ {
@@ -79,144 +96,150 @@ func (cp *ParsedInfo) generateVBAmap() {
 
 func (cp *ParsedInfo) GenMap(con *Conf) {
 	if rv, cm, err := con.generatevBucketMap(); err == false {
-        cp.M.Lock()
-        defer cp.M.Unlock()
+		cp.M.Lock()
+		defer cp.M.Unlock()
 		cp.V.VBucketMap = *rv
 		cp.V.HashAlgorithm = con.Hash
 		cp.V.NumReplicas = int(con.Replica)
-        fmt.Println("serverlist is", con.Servers)
+		Log.Debug("serverlist is", con.Servers)
 		cp.V.ServerList = con.Servers
 		cp.C = *con //update the config
 		cp.generateVBAmap()
-        fmt.Println("capacity is", con.Capacity)
+		Log.Debug("capacity is", con.Capacity)
 		cp.updateMaxCapacity(con.Capacity, len(con.Servers), cm)
-		fmt.Println("updated map ", cp.V)
+		Log.Debug("updated map ", cp.V)
 	} else {
-		fmt.Println("failed updated map ", err)
+		Log.Debug("failed updated map ", err)
 	}
 }
 
 func (cp *ParsedInfo) updateMaxCapacity(capacity int16, totServers int, cm *[]int16) {
-    cc := int16(float32(2*cp.C.Vbuckets)*(1+(float32(capacity)/100)))/int16(totServers)
-    for i := 0; i < totServers; i++ {
-        c := ServerInfo {
-            maxVbuckets: cc,
-            currentVbuckets : (*cm)[i],
-        }
-        fmt.Println("capacity is", cc, i)
-        cp.S = append(cp.S, c)
-    }
+	cc := int16(float32(2*cp.C.Vbuckets)*(1+(float32(capacity)/100))) / int16(totServers)
+	for i := 0; i < totServers; i++ {
+		c := ServerInfo{
+			maxVbuckets:     cc,
+			currentVbuckets: (*cm)[i],
+		}
+		Log.Debug("capacity is", cc, i)
+		cp.S = append(cp.S, c)
+	}
 }
 
 //return the free server
-func (cp *ParsedInfo) findFreeServer(s int) int {
-    arr := make([]int, len(cp.C.Servers))
-    for i:=0;i<len(cp.C.Servers);i++ {
-        arr[i] = i
-    }
-    //remove the same server
-    lastindex := len(cp.C.Servers)-1
-    arr[s],arr[lastindex] = arr[lastindex], arr[s]
-    lastindex--
+func (cp *ParsedInfo) findFreeServer(s int, s2 int) int {
+	arr := make([]int, len(cp.C.Servers))
+	for i := 0; i < len(cp.C.Servers); i++ {
+		arr[i] = i
+	}
+	//remove the same server
+	lastindex := len(cp.C.Servers) - 1
+	arr[s], arr[lastindex] = arr[lastindex], arr[s]
+	lastindex--
+	arr[s2], arr[lastindex] = arr[lastindex], arr[s2]
+	lastindex--
 
-    count := lastindex
-    fmt.Println("lastindex is", lastindex)
-    //donald knuth random shuffle algo ;)
-    for k:=0; k<=count; k++ {
-        fmt.Println("test")
-        var j int32
-        if lastindex == 0 {
-            j = 0
-        } else {
-            j = rand.Int31n(int32(lastindex))
-        }
-        i := arr[j]
+	count := lastindex
+	Log.Debug("lastindex is", lastindex)
+	//donald knuth random shuffle algo ;)
+	for k := 0; k <= count; k++ {
+		Log.Debug("test")
+		var j int32
+		if lastindex == 0 {
+			j = 0
+		} else {
+			j = rand.Int31n(int32(lastindex))
+		}
+		i := arr[j]
 		serInfo := cp.S[i]
 		if serInfo.currentVbuckets < serInfo.maxVbuckets {
 			cp.S[i].currentVbuckets++
 			return i
 		} else {
-            fmt.Println("failed current and max ,index", serInfo.currentVbuckets, serInfo.maxVbuckets, i)
-        }
-        arr[j],arr[lastindex] = arr[lastindex], arr[j]
-        lastindex--
+			Log.Debug("failed current and max ,index", serInfo.currentVbuckets, serInfo.maxVbuckets, i)
+		}
+		arr[j], arr[lastindex] = arr[lastindex], arr[j]
+		lastindex--
 	}
-    fmt.Println("freeserver", cp.S)
-    panic("No free server")
+	Log.Debug("freeserver", cp.S)
+	panic("No free server")
 	return -1
 }
 
-func (cp *ParsedInfo)reduceCapacity(s int, n int, c int16) {
-    if  n == 0 {
-        cp.S[s].maxVbuckets = 0
-        cp.S[s].currentVbuckets = 0
-    } else {
-        cp.S[s].maxVbuckets -= cp.S[s].maxVbuckets/cp.S[s].NumberOfDisc
-        cp.S[s].currentVbuckets -= c
-    }
+func (cp *ParsedInfo) reduceCapacity(s int, n int, c int16) {
+	if n == 0 {
+		cp.S[s].maxVbuckets = 0
+		cp.S[s].currentVbuckets = 0
+	} else {
+		//cp.S[s].maxVbuckets -= cp.S[s].maxVbuckets/cp.S[s].NumberOfDisc
+		cp.S[s].currentVbuckets -= c
+	}
 }
 
-func (cp *ParsedInfo)getServerVbuckets(s int) *DeadVbucketInfo {
-    cp.M.Lock()
-    defer cp.M.Unlock()
-    vbaMap := cp.V.VBucketMap
-    dvi := new(DeadVbucketInfo)
-    for i:=0;i<len(vbaMap);i++ {
-        for j:=0;j<len(vbaMap[i]);j++ {
-            if vbaMap[i][j] == s {
-                if j == 0 {
-                    dvi.Active = append(dvi.Active, i)
-                } else {
-                    dvi.Replica = append(dvi.Replica, i)
-                }
-            }
-        }
-    }
-    return dvi
+func (cp *ParsedInfo) getServerVbuckets(s int) *DeadVbucketInfo {
+	cp.M.Lock()
+	defer cp.M.Unlock()
+	vbaMap := cp.V.VBucketMap
+	dvi := new(DeadVbucketInfo)
+	for i := 0; i < len(vbaMap); i++ {
+		for j := 0; j < len(vbaMap[i]); j++ {
+			if vbaMap[i][j] == s {
+				if j == 0 {
+					dvi.Active = append(dvi.Active, i)
+				} else {
+					dvi.Replica = append(dvi.Replica, i)
+				}
+			}
+		}
+	}
+	return dvi
 }
 
-func (cp *ParsedInfo) HandleServerDown(ser string) map[string]VbaEntry {
-    dvi := cp.getServerVbuckets(cp.getServerIndex(ser))
-    return cp.HandleDeadVbuckets(*dvi, ser)
+func (cp *ParsedInfo) HandleServerDown(ser string) (bool, map[string]VbaEntry) {
+	dvi := cp.getServerVbuckets(cp.getServerIndex(ser))
+	return cp.HandleDeadVbuckets(*dvi, ser, true)
 }
 
-func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string) map[string]VbaEntry {
-    cp.M.Lock()
-    defer cp.M.Unlock()
+func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown bool) (bool, map[string]VbaEntry) {
+	cp.M.Lock()
+	defer cp.M.Unlock()
 	oldVbaMap := cp.VbaInfo
-	serverList := cp.C.Servers
+	serverList := cp.V.ServerList
 	vbucketMa := cp.V.VBucketMap
 	changeVbaMap := make(map[string]VbaEntry)
-    ser := cp.getServerIndex(s)
-    if ser == -1 {
-        panic("server not there")
-    }
-    fmt.Println("old vbucket map was", vbucketMa)
-    cp.reduceCapacity(ser, dvi.DiscsFailed, int16(len(dvi.Active)+len(dvi.Replica)))
+	Log.Debug("input server is", s)
+	ser := cp.getServerIndex(s)
+	if ser == -1 {
+		Log.Debug("Server not in list", s)
+		return false, changeVbaMap
+	} else if serverDown {
+		cp.V.ServerList[ser] = DEAD_NODE_IP
+	}
+	Log.Debug("old vbucket map was", vbucketMa)
+	cp.reduceCapacity(ser, dvi.DiscsFailed, int16(len(dvi.Active)+len(dvi.Replica)))
 	for i := 0; i < len(dvi.Active); i++ {
 		vbucket := vbucketMa[dvi.Active[i]]
 		for k := 1; k < len(vbucket); k++ {
 			key := serverList[vbucket[0]] + serverList[vbucket[k]]
-            oldEntry := oldVbaMap[key]
-            for r := 0; r < len(oldEntry.VbId); r++ {
-                if oldEntry.VbId[r] == dvi.Active[i] {
-                    if r == 0  {
-                        oldEntry.VbId = oldEntry.VbId[1:]
-                    } else {
-                        oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-                    }
-                    break
-                }
-            }
-            if len(oldEntry.VbId) == 0 {
-                delete(oldVbaMap, key)
-            } else {
-                changeVbaMap[key] = oldEntry
-                oldVbaMap[key] = oldEntry
-            }
-        }
+			oldEntry := oldVbaMap[key]
+			for r := 0; r < len(oldEntry.VbId); r++ {
+				if oldEntry.VbId[r] == dvi.Active[i] {
+					if r == 0 {
+						oldEntry.VbId = oldEntry.VbId[1:]
+					} else {
+						oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+					}
+					break
+				}
+			}
+			if len(oldEntry.VbId) == 0 {
+				delete(oldVbaMap, key)
+			} else {
+				changeVbaMap[key] = oldEntry
+				oldVbaMap[key] = oldEntry
+			}
+		}
 		vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][1]
-		serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0])
+		serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], ser)
 		vbucketMa[dvi.Active[i]][1] = serverIndex
 
 		vbucket = vbucketMa[dvi.Active[i]]
@@ -234,26 +257,28 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string) map[stri
 		key := serverList[vbucket[0]] + serverList[ser]
 		oldEntry := oldVbaMap[key]
 		//delete the replica vbucket from the vba map
-        for r := 0; r < len(oldEntry.VbId); r++ {
-            if oldEntry.VbId[r] == dvi.Replica[i] {
-                if r == 0 {
-                    oldEntry.VbId = oldEntry.VbId[1:]
-                } else {
-                    oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-                }
-                if len(oldEntry.VbId) == 0 {
-                    delete(oldVbaMap, key)
-                } else {
-                    changeVbaMap[key] = oldEntry
-                    oldVbaMap[key] = oldEntry
-                }
-                break
-            }
-        }
+		for r := 0; r < len(oldEntry.VbId); r++ {
+			if oldEntry.VbId[r] == dvi.Replica[i] {
+				if r == 0 {
+					oldEntry.VbId = oldEntry.VbId[1:]
+				} else {
+					oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+				}
+				if len(oldEntry.VbId) == 0 {
+					delete(oldVbaMap, key)
+				} else {
+					changeVbaMap[key] = oldEntry
+					oldVbaMap[key] = oldEntry
+				}
+				break
+			}
+		}
 		var j int
 		for j = 0; j < len(vbucket); j++ {
 			if vbucket[j] == ser {
-				serverIndex := cp.findFreeServer(vbucket[0])
+				Log.Debug("vbucket", vbucket, "j is", j, "ser is", ser)
+				serverIndex := cp.findFreeServer(vbucket[0], ser)
+				Log.Debug("j is, new server is", j, serverIndex)
 				key := serverList[vbucket[0]] + serverList[serverIndex]
 				oldEntry := oldVbaMap[key]
 				oldEntry.VbId = append(oldEntry.VbId, dvi.Replica[i])
@@ -263,32 +288,33 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string) map[stri
 			}
 		}
 	}
-    cp.VbaInfo = oldVbaMap
-    fmt.Println("new vbucket map was",vbucketMa)
-	return changeVbaMap
+	cp.VbaInfo = oldVbaMap
+	Log.Debug("new vbucket map was", vbucketMa)
+	return true, changeVbaMap
 }
 
 func (cp *ParsedInfo) HandleServerAlive(ser string) {
-    cp.M.Lock()
-    cp.C.Servers = append(cp.C.Servers, ser)
-    cp.M.Unlock()
+	cp.M.Lock()
+	cp.C.Servers = append(cp.C.Servers, ser)
+	cp.M.Unlock()
 }
 
 func (cp *ParsedInfo) getServerIndex(si string) int {
-    s := cp.V.ServerList
-    for i := range s {
-        if s[i] == si {
-            return i
-       }
-    }
-    return -1
+	s := cp.V.ServerList
+	for i := range s {
+		if s[i] == si {
+			return i
+		}
+	}
+	Log.Debug("server list is", s)
+	return -1
 }
 
 func (cp *ParsedInfo) HandleCapacityUpdate(ci CapacityUpdateInfo) {
-    cp.M.Lock()
-    defer cp.M.Unlock()
-    i := cp.getServerIndex(ci.Server)
-    si := cp.S[i]
-    si.maxVbuckets += (si.maxVbuckets*ci.DiscAlive)/si.NumberOfDisc
-    cp.S[i] = si
+	cp.M.Lock()
+	defer cp.M.Unlock()
+	i := cp.getServerIndex(ci.Server)
+	si := cp.S[i]
+	si.maxVbuckets += (si.maxVbuckets * ci.DiscAlive) / si.NumberOfDisc
+	cp.S[i] = si
 }

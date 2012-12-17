@@ -1,14 +1,14 @@
 package conf
 
 import (
-    "sync"
+	"sync"
 )
 
 //per server info structure
 type ServerInfo struct {
 	currentVbuckets int16
 	maxVbuckets     int16
-    NumberOfDisc    int16
+	NumberOfDisc    int16
 }
 
 type Conf struct {
@@ -21,15 +21,15 @@ type Conf struct {
 }
 
 type VBucketInfo struct {
-    VBucketMap    [][]int  `json:"vBucketMap"`
-    HashAlgorithm string   `json:"hashAlgorithm"`
-    NumReplicas   int      `json:"numReplicas"`
-    ServerList    []string `json:"serverList"`
+	VBucketMap    [][]int  `json:"vBucketMap"`
+	HashAlgorithm string   `json:"hashAlgorithm"`
+	NumReplicas   int      `json:"numReplicas"`
+	ServerList    []string `json:"serverList"`
 }
 
 type DeadVbucketInfo struct {
 	Server      string
-    DiscsFailed  int
+	DiscsFailed int
 	Active      []int
 	Replica     []int
 }
@@ -47,12 +47,12 @@ type stateEntry struct {
 }
 
 type ServerUpDownInfo struct {
-    Server string
+	Server string
 }
 
 type CapacityUpdateInfo struct {
-    Server      string
-    DiscAlive   int16
+	Server    string
+	DiscAlive int16
 }
 
 type ParsedInfo struct {
@@ -71,4 +71,3 @@ func NewStateEntry(s int, vbid int, st string) stateEntry {
 	}
 	return se
 }
-
