@@ -165,12 +165,12 @@ func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
 	defer v.Mu.RUnlock()
 	connectedServs := []string{}
 	/*
-		for a := range c.Servers {
-	        //Need to uncomment this
-			if _, ok := v.Ma[c.Servers[a]]; ok {
-				connectedServs = append(connectedServs, c.Servers[a])
-		}
-			}*/
+			for a := range c.Servers {
+		        //Need to uncomment this
+				if _, ok := v.Ma[c.Servers[a]]; ok {
+					connectedServs = append(connectedServs, c.Servers[a])
+			}
+				}*/
 	connectedServs = c.Servers
 	Log.Debug("connect servers are", connectedServs)
 	capacity := len(connectedServs) * 100 / len(c.Servers)
