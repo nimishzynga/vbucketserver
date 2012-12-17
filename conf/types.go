@@ -8,7 +8,7 @@ import (
 type ServerInfo struct {
 	currentVbuckets int16
 	maxVbuckets     int16
-	NumberOfDisc    int16
+	NumberOfDisk    int16
 }
 
 type Conf struct {
@@ -29,7 +29,7 @@ type VBucketInfo struct {
 
 type DeadVbucketInfo struct {
 	Server      string
-	DiscsFailed int
+	DisksFailed int
 	Active      []int
 	Replica     []int
 }
@@ -52,7 +52,7 @@ type ServerUpDownInfo struct {
 
 type CapacityUpdateInfo struct {
 	Server    string
-	DiscAlive int16
+	DiskAlive int16
 }
 
 type ParsedInfo struct {

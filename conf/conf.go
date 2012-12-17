@@ -158,7 +158,7 @@ func (cp *ParsedInfo) reduceCapacity(s int, n int, c int16) {
 		cp.S[s].maxVbuckets = 0
 		cp.S[s].currentVbuckets = 0
 	} else {
-		//cp.S[s].maxVbuckets -= cp.S[s].maxVbuckets/cp.S[s].NumberOfDisc
+		//cp.S[s].maxVbuckets -= cp.S[s].maxVbuckets/cp.S[s].NumberOfDisk
 		cp.S[s].currentVbuckets -= c
 	}
 }
@@ -203,7 +203,7 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDo
 		cp.V.ServerList[ser] = DEAD_NODE_IP
 	}
 	log.Println("old vbucket map was", vbucketMa)
-	cp.reduceCapacity(ser, dvi.DiscsFailed, int16(len(dvi.Active)+len(dvi.Replica)))
+	cp.reduceCapacity(ser, dvi.DisksFailed, int16(len(dvi.Active)+len(dvi.Replica)))
 	for i := 0; i < len(dvi.Active); i++ {
 		vbucket := vbucketMa[dvi.Active[i]]
 		for k := 1; k < len(vbucket); k++ {
@@ -303,6 +303,6 @@ func (cp *ParsedInfo) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 	defer cp.M.Unlock()
 	i := cp.getServerIndex(ci.Server)
 	si := cp.S[i]
-	si.maxVbuckets += (si.maxVbuckets * ci.DiscAlive) / si.NumberOfDisc
+	si.maxVbuckets += (si.maxVbuckets * ci.DiskAlive) / si.NumberOfDisk
 	cp.S[i] = si
 }

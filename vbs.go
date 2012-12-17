@@ -10,7 +10,7 @@ import (
 )
 import _ "net/http/pprof"
 
-func Init(cp *conf.ParsedInfo, co *cl.Client) {
+func SetupHandlers(cp *conf.ParsedInfo, co *cl.Client) {
 	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
 		HandleUpLoadConfig(c, cp)
 	})
@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 
 	goweb.ConfigureDefaultFormatters()
-	Init(&cp, h)
+	SetupHandlers(&cp, h)
 	go cl.HandleTcp(h, &cp, *port, *file)
 	go func() {
 		log.Println(http.ListenAndServe(":8080", nil))
