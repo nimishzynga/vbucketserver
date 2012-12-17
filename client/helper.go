@@ -2,17 +2,15 @@
 package clientHandler1
 
 import (
-	l4g "code.google.com/p/log4go"
 	"encoding/json"
 	"io/ioutil"
+    "log"
 	"net"
 	"os"
 	"strings"
 	"time"
 	"vbucketserver/conf"
 )
-
-var Log l4g.Logger
 
 func getIpAddr(c net.Conn) string {
 	ip := strings.Split(c.RemoteAddr().String(), ":")[0]
@@ -23,17 +21,6 @@ func getIpAddr(c net.Conn) string {
 func getIpAddrWithPort(c net.Conn) string {
 	ip := c.RemoteAddr().String()
 	return ip
-}
-
-func SetLogFile(file string, ll string) {
-	Log = make(l4g.Logger)
-	level := l4g.WARNING
-	if ll == "info" {
-		level = l4g.INFO
-	} else if ll == "debug" {
-		level = l4g.DEBUG
-	}
-	Log.AddFilter("file", level, l4g.NewFileLogWriter(file, false))
 }
 
 ///XXX:Put more validation checks for file inputs
@@ -52,11 +39,11 @@ func parseInitialConfig(f string, cp *conf.ParsedInfo) *conf.Conf {
 		panic(err)
 	}
 	if err := json.Unmarshal(buf, con); err != nil {
-		Log.Debug("error in unmarshalling")
+		log.Println("error in unmarshalling")
 		return nil
 	}
 	if con.Replica <= 0 || con.Capacity <= 0 || len(con.Servers) == 0 {
-		Log.Debug("Invalid configuration data")
+		log.Println("Invalid configuration data")
 		return nil
 	}
 	return con
@@ -74,7 +61,7 @@ func getClientType(c net.Conn, co *Client) string {
 	if cl := co.Cli.Ma[ip]; cl != nil {
 		return CLIENT_CLI
 	}
-	Log.Debug("client type is unknown", ip, co.Vba.Ma)
+	log.Println("client type is unknown", ip, co.Vba.Ma)
 	return CLIENT_UNKNOWN
 }
 
@@ -93,7 +80,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 			ip, _ := args[3].(string)
 			cp.M.RLock()
 			defer cp.M.RUnlock()
-			Log.Debug("agent is", agent)
+			log.Println("agent is", agent)
 			if agent == CLIENT_MOXI {
 				m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: cp.V, HeartBeatTime: t}
 				return json.Marshal(m)
@@ -117,7 +104,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 //wait for VBA's to connect initially
 func waitForVBAs(c *conf.Conf, cp *conf.ParsedInfo, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
-	Log.Debug("sleep over for vbas")
+	log.Println("sleep over for vbas")
 	checkVBAs(c, co.Vba)
 	cp.GenMap(c)
 	co.Started = true
@@ -125,9 +112,9 @@ func waitForVBAs(c *conf.Conf, cp *conf.ParsedInfo, to int, co *Client) {
 }
 
 func getServerIndex(cp *conf.ParsedInfo, sr string) int {
-	Log.Debug("input server is", sr, "all are", cp.C.Servers)
+	log.Println("input server is", sr, "all are", cp.C.Servers)
 	for s := range cp.C.Servers {
-		Log.Debug(strings.Split(cp.C.Servers[s], ":")[0])
+		log.Println(strings.Split(cp.C.Servers[s], ":")[0])
 		if strings.Split(cp.C.Servers[s], ":")[0] == sr {
 			return s
 		}
@@ -172,7 +159,7 @@ func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
 			}
 				}*/
 	connectedServs = c.Servers
-	Log.Debug("connect servers are", connectedServs)
+	log.Println("connect servers are", connectedServs)
 	capacity := len(connectedServs) * 100 / len(c.Servers)
 
 	if capacity < CLIENT_PCNT {
@@ -189,7 +176,7 @@ func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
 func Insert(c net.Conn, ch chan string, co *Client, a string) {
 	/*XXX:close the older connection if exists*/
 	ip := getIpAddr(c)
-	Log.Debug("insert ip is", ip)
+	log.Println("insert ip is", ip)
 	if a == CLIENT_MOXI {
 		co.Moxi.Mu.Lock()
 		if co.Moxi.Ma[ip] == nil {

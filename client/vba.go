@@ -2,6 +2,7 @@ package clientHandler1
 
 import (
 	"net"
+    "log"
 	"vbucketserver/conf"
 )
 
@@ -38,7 +39,7 @@ func (gc *GenericClient) HandleFail(m *RecvMsg, cp *conf.ParsedInfo, co *Client)
 	_ = cp
 	_ = m
 	_ = co
-	Log.Debug("invalid client")
+	log.Println("invalid client")
 	return false
 }
 
@@ -59,7 +60,7 @@ func (mc *MoxiClient) ClientType() string {
 
 //it shoudl be for mcs client
 func (mc *MoxiClient) HandleFail(m *RecvMsg, cp *conf.ParsedInfo, co *Client) bool {
-	Log.Debug("inside handleFail")
+	log.Println("inside handleFail")
 	ok, mp := cp.HandleServerDown(m.Server)
 	if ok {
 		//need to call it on client info
@@ -110,7 +111,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cp *conf.ParsedInfo, co *Client,
 	co.Con.L.Unlock()
 	index := getServerIndex(cp, getIpAddr(vc.conn))
 	if index == -1 {
-		Log.Debug("Server not in list", getIpAddr(vc.conn))
+		log.Println("Server not in list", getIpAddr(vc.conn))
 		return false
 	}
 	si := cp.S[index]

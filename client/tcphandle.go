@@ -2,6 +2,7 @@ package clientHandler1
 
 import (
 	"bytes"
+    "log"
 	"encoding/binary"
 	"encoding/json"
 	"net"
@@ -72,7 +73,7 @@ type VbsClient interface {
 func HandleTcp(c *Client, cp *conf.ParsedInfo, s string, confFile string) {
 	listener, err := net.Listen("tcp", s)
 	if err != nil {
-		Log.Debug("error listening:", err.Error())
+		log.Println("error listening:", err.Error())
 		os.Exit(1)
 	}
 	//parse the conf file
@@ -85,7 +86,7 @@ func HandleTcp(c *Client, cp *conf.ParsedInfo, s string, confFile string) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			Log.Debug("Error accept:", err.Error())
+			log.Println("Error accept:", err.Error())
 			return
 		}
 		go handleConn(conn, c, cp)
@@ -106,7 +107,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 		conn.Write(l.Bytes())
 		_, err := conn.Write(m)
 		if err != nil {
-			Log.Debug("Error write", err.Error())
+			log.Println("Error write", err.Error())
 			return
 		}
 	}
@@ -123,7 +124,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
 
 	defer func() {
 		conn.Close()
-		Log.Debug("disconnecting client", getIpAddr(conn))
+		log.Println("disconnecting client", getIpAddr(conn))
 		if vc != nil {
 			RemoveConn(conn, co, vc.ClientType())
 		}
@@ -152,11 +153,11 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
 	for {
 		select {
 		case <-c1:
-			Log.Debug("error on socket")
+			log.Println("error on socket")
 			return
 		case data = <-c2:
 			currTimeouts = 0
-			Log.Debug("got data")
+			log.Println("got data")
 			fullData = append(fullData, data...)
 		case info := <-c3:
 			if info == CHN_NOTIFY_STR {
@@ -170,7 +171,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
 			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
 				return
 			}
-			Log.Debug("timeout on socket", conn)
+			log.Println("timeout on socket", conn)
 			length = 0
 			fullData = fullData[:0]
 			continue
@@ -184,7 +185,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.ParsedInfo) {
 						buf := bytes.NewBuffer(fullData)
 						binary.Read(buf, binary.BigEndian, &length)
 						if length > RECV_BUF_LEN {
-							Log.Debug("Data size is more", length)
+							log.Println("Data size is more", length)
 							return
 						}
 						fullData = fullData[HEADER_SIZE:]
@@ -227,7 +228,7 @@ func parseMsg(b []byte) (*RecvMsg, error) {
 	m := &RecvMsg{}
 	var err error
 	if err = json.Unmarshal(b, m); err != nil {
-		Log.Debug("error in unmarshalling")
+		log.Println("error in unmarshalling")
 	}
 	return m, err
 }
@@ -260,7 +261,7 @@ func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 			if vc.HandleOk(m) {
 				*s = STATE_ALIVE
 			}
-			Log.Debug("setting alive state")
+			log.Println("setting alive state")
 
 		case STATE_ALIVE:
 			if vc.HandleAlive(m) == false {

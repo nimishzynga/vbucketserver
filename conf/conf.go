@@ -1,26 +1,14 @@
 package conf
 
 import (
-	l4g "code.google.com/p/log4go"
 	"math/rand"
+    "log"
 )
 
 const (
 	DEAD_NODE_IP = "0.0.0.0:11211"
 )
 
-var Log l4g.Logger
-
-func SetLogFile(file string, ll string) {
-	Log = make(l4g.Logger)
-	level := l4g.WARNING
-	if ll == "info" {
-		level = l4g.INFO
-	} else if ll == "debug" {
-		level = l4g.DEBUG
-	}
-	Log.AddFilter("file", level, l4g.NewFileLogWriter(file, false))
-}
 
 func (c Conf) generatevBucketMap() (*[][]int, *[]int16, bool) {
 	serv := len(c.Servers)
@@ -101,15 +89,15 @@ func (cp *ParsedInfo) GenMap(con *Conf) {
 		cp.V.VBucketMap = *rv
 		cp.V.HashAlgorithm = con.Hash
 		cp.V.NumReplicas = int(con.Replica)
-		Log.Debug("serverlist is", con.Servers)
+		log.Println("serverlist is", con.Servers)
 		cp.V.ServerList = con.Servers
 		cp.C = *con //update the config
 		cp.generateVBAmap()
-		Log.Debug("capacity is", con.Capacity)
+		log.Println("capacity is", con.Capacity)
 		cp.updateMaxCapacity(con.Capacity, len(con.Servers), cm)
-		Log.Debug("updated map ", cp.V)
+		log.Println("updated map ", cp.V)
 	} else {
-		Log.Debug("failed updated map ", err)
+		log.Println("failed updated map ", err)
 	}
 }
 
@@ -120,7 +108,7 @@ func (cp *ParsedInfo) updateMaxCapacity(capacity int16, totServers int, cm *[]in
 			maxVbuckets:     cc,
 			currentVbuckets: (*cm)[i],
 		}
-		Log.Debug("capacity is", cc, i)
+		log.Println("capacity is", cc, i)
 		cp.S = append(cp.S, c)
 	}
 }
@@ -139,10 +127,10 @@ func (cp *ParsedInfo) findFreeServer(s int, s2 int) int {
 	lastindex--
 
 	count := lastindex
-	Log.Debug("lastindex is", lastindex)
+	log.Println("lastindex is", lastindex)
 	//donald knuth random shuffle algo ;)
 	for k := 0; k <= count; k++ {
-		Log.Debug("test")
+		log.Println("test")
 		var j int32
 		if lastindex == 0 {
 			j = 0
@@ -155,12 +143,12 @@ func (cp *ParsedInfo) findFreeServer(s int, s2 int) int {
 			cp.S[i].currentVbuckets++
 			return i
 		} else {
-			Log.Debug("failed current and max ,index", serInfo.currentVbuckets, serInfo.maxVbuckets, i)
+			log.Println("failed current and max ,index", serInfo.currentVbuckets, serInfo.maxVbuckets, i)
 		}
 		arr[j], arr[lastindex] = arr[lastindex], arr[j]
 		lastindex--
 	}
-	Log.Debug("freeserver", cp.S)
+	log.Println("freeserver", cp.S)
 	panic("No free server")
 	return -1
 }
@@ -206,15 +194,15 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDo
 	serverList := cp.V.ServerList
 	vbucketMa := cp.V.VBucketMap
 	changeVbaMap := make(map[string]VbaEntry)
-	Log.Debug("input server is", s)
+	log.Println("input server is", s)
 	ser := cp.getServerIndex(s)
 	if ser == -1 {
-		Log.Debug("Server not in list", s)
+		log.Println("Server not in list", s)
 		return false, changeVbaMap
 	} else if serverDown {
 		cp.V.ServerList[ser] = DEAD_NODE_IP
 	}
-	Log.Debug("old vbucket map was", vbucketMa)
+	log.Println("old vbucket map was", vbucketMa)
 	cp.reduceCapacity(ser, dvi.DiscsFailed, int16(len(dvi.Active)+len(dvi.Replica)))
 	for i := 0; i < len(dvi.Active); i++ {
 		vbucket := vbucketMa[dvi.Active[i]]
@@ -276,9 +264,9 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDo
 		var j int
 		for j = 0; j < len(vbucket); j++ {
 			if vbucket[j] == ser {
-				Log.Debug("vbucket", vbucket, "j is", j, "ser is", ser)
+				log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
 				serverIndex := cp.findFreeServer(vbucket[0], ser)
-				Log.Debug("j is, new server is", j, serverIndex)
+				log.Println("j is, new server is", j, serverIndex)
 				key := serverList[vbucket[0]] + serverList[serverIndex]
 				oldEntry := oldVbaMap[key]
 				oldEntry.VbId = append(oldEntry.VbId, dvi.Replica[i])
@@ -289,7 +277,7 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDo
 		}
 	}
 	cp.VbaInfo = oldVbaMap
-	Log.Debug("new vbucket map was", vbucketMa)
+	log.Println("new vbucket map was", vbucketMa)
 	return true, changeVbaMap
 }
 
@@ -306,7 +294,7 @@ func (cp *ParsedInfo) getServerIndex(si string) int {
 			return i
 		}
 	}
-	Log.Debug("server list is", s)
+	log.Println("server list is", s)
 	return -1
 }
 
