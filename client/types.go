@@ -24,7 +24,7 @@ type ClientInfoMap struct {
 //information of all the clients
 type Client struct {
 	Started        bool
-	Con            *sync.Cond
+	Cond           *sync.Cond
 	Moxi, Vba, Cli ClientInfoMap
 }
 
@@ -69,7 +69,7 @@ func NewClientInfoMap() ClientInfoMap {
 func NewClient() *Client {
 	cl := &Client{
 		Started: false,
-		Con:     sync.NewCond(new(sync.Mutex)),
+		Cond:     sync.NewCond(new(sync.Mutex)),
 		Moxi:    NewClientInfoMap(),
 		Vba:     NewClientInfoMap(),
 		Cli:     NewClientInfoMap(),

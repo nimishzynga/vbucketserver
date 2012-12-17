@@ -17,7 +17,7 @@ func main() {
 
 	goweb.ConfigureDefaultFormatters()
 
-	var cp conf.ParsedInfo
+	var cp conf.Context
 	h := client.NewClient()
 	SetupHandlers(&cp, h)
 	go client.HandleTcp(h, &cp, *port, *file)

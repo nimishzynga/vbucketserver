@@ -55,7 +55,7 @@ type CapacityUpdateInfo struct {
 	DiskAlive int16
 }
 
-type ParsedInfo struct {
+type Context struct {
 	C       Conf         //input Conf
 	V       VBucketInfo  // vbucketMap to send to client
 	S       []ServerInfo // per server information

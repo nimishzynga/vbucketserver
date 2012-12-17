@@ -57,7 +57,7 @@ func (c Conf) generatevBucketMap() (*[][]int, *[]int16, bool) {
 	return &confMap, &capacityMap, false
 }
 
-func (cp *ParsedInfo) generateVBAmap() {
+func (cp *Context) generateVBAmap() {
 	m := cp.V.VBucketMap
 	serverList := cp.C.Servers
 	vbaMap := make(map[string]VbaEntry)
@@ -82,7 +82,7 @@ func (cp *ParsedInfo) generateVBAmap() {
 	cp.VbaInfo = vbaMap
 }
 
-func (cp *ParsedInfo) GenMap(con *Conf) {
+func (cp *Context) GenMap(con *Conf) {
 	if rv, cm, err := con.generatevBucketMap(); err == false {
 		cp.M.Lock()
 		defer cp.M.Unlock()
@@ -101,7 +101,7 @@ func (cp *ParsedInfo) GenMap(con *Conf) {
 	}
 }
 
-func (cp *ParsedInfo) updateMaxCapacity(capacity int16, totServers int, cm *[]int16) {
+func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]int16) {
 	cc := int16(float32(2*cp.C.Vbuckets)*(1+(float32(capacity)/100))) / int16(totServers)
 	for i := 0; i < totServers; i++ {
 		c := ServerInfo{
@@ -114,7 +114,7 @@ func (cp *ParsedInfo) updateMaxCapacity(capacity int16, totServers int, cm *[]in
 }
 
 //return the free server
-func (cp *ParsedInfo) findFreeServer(s int, s2 int) int {
+func (cp *Context) findFreeServer(s int, s2 int) int {
 	arr := make([]int, len(cp.C.Servers))
 	for i := 0; i < len(cp.C.Servers); i++ {
 		arr[i] = i
@@ -153,7 +153,7 @@ func (cp *ParsedInfo) findFreeServer(s int, s2 int) int {
 	return -1
 }
 
-func (cp *ParsedInfo) reduceCapacity(s int, n int, c int16) {
+func (cp *Context) reduceCapacity(s int, n int, c int16) {
 	if n == 0 {
 		cp.S[s].maxVbuckets = 0
 		cp.S[s].currentVbuckets = 0
@@ -163,7 +163,7 @@ func (cp *ParsedInfo) reduceCapacity(s int, n int, c int16) {
 	}
 }
 
-func (cp *ParsedInfo) getServerVbuckets(s int) *DeadVbucketInfo {
+func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	cp.M.Lock()
 	defer cp.M.Unlock()
 	vbaMap := cp.V.VBucketMap
@@ -182,12 +182,12 @@ func (cp *ParsedInfo) getServerVbuckets(s int) *DeadVbucketInfo {
 	return dvi
 }
 
-func (cp *ParsedInfo) HandleServerDown(ser string) (bool, map[string]VbaEntry) {
+func (cp *Context) HandleServerDown(ser string) (bool, map[string]VbaEntry) {
 	dvi := cp.getServerVbuckets(cp.getServerIndex(ser))
 	return cp.HandleDeadVbuckets(*dvi, ser, true)
 }
 
-func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown bool) (bool, map[string]VbaEntry) {
+func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown bool) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
 	defer cp.M.Unlock()
 	oldVbaMap := cp.VbaInfo
@@ -281,13 +281,13 @@ func (cp *ParsedInfo) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDo
 	return true, changeVbaMap
 }
 
-func (cp *ParsedInfo) HandleServerAlive(ser string) {
+func (cp *Context) HandleServerAlive(ser string) {
 	cp.M.Lock()
 	cp.C.Servers = append(cp.C.Servers, ser)
 	cp.M.Unlock()
 }
 
-func (cp *ParsedInfo) getServerIndex(si string) int {
+func (cp *Context) getServerIndex(si string) int {
 	s := cp.V.ServerList
 	for i := range s {
 		if s[i] == si {
@@ -298,7 +298,7 @@ func (cp *ParsedInfo) getServerIndex(si string) int {
 	return -1
 }
 
-func (cp *ParsedInfo) HandleCapacityUpdate(ci CapacityUpdateInfo) {
+func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 	cp.M.Lock()
 	defer cp.M.Unlock()
 	i := cp.getServerIndex(ci.Server)

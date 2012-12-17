@@ -1,10 +1,10 @@
-//contains the helper functions 
+//contains the helper functions
 package client
 
 import (
 	"encoding/json"
 	"io/ioutil"
-    "log"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -24,7 +24,7 @@ func getIpAddrWithPort(c net.Conn) string {
 }
 
 ///XXX:Put more validation checks for file inputs
-func parseInitialConfig(f string, cp *conf.ParsedInfo) *conf.Conf {
+func parseInitialConfig(f string, cp *conf.Context) *conf.Conf {
 	con := &conf.Conf{}
 	fi, err := os.Open(f)
 	if err != nil {
@@ -74,7 +74,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 			m.Cmd = MSG_INIT_STR
 			return json.Marshal(m)
 		case MSG_CONFIG:
-			cp, _ := args[0].(*conf.ParsedInfo)
+			cp, _ := args[0].(*conf.Context)
 			t, _ := args[1].(int)
 			agent, _ := args[2].(string)
 			ip, _ := args[3].(string)
@@ -102,16 +102,16 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 }
 
 //wait for VBA's to connect initially
-func waitForVBAs(c *conf.Conf, cp *conf.ParsedInfo, to int, co *Client) {
+func waitForVBAs(c *conf.Conf, cp *conf.Context, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
 	log.Println("sleep over for vbas")
 	checkVBAs(c, co.Vba)
 	cp.GenMap(c)
 	co.Started = true
-	co.Con.Broadcast()
+	co.Cond.Broadcast()
 }
 
-func getServerIndex(cp *conf.ParsedInfo, sr string) int {
+func getServerIndex(cp *conf.Context, sr string) int {
 	log.Println("input server is", sr, "all are", cp.C.Servers)
 	for s := range cp.C.Servers {
 		log.Println(strings.Split(cp.C.Servers[s], ":")[0])
