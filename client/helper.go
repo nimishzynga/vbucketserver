@@ -1,5 +1,5 @@
 //contains the helper functions 
-package clientHandler1
+package client
 
 import (
 	"encoding/json"

@@ -3,7 +3,7 @@ package main
 import (
 	"code.google.com/p/goweb/goweb"
     "log"
-	cl "vbucketserver/client"
+	"vbucketserver/client"
 	"vbucketserver/conf"
 )
 
@@ -25,7 +25,7 @@ func HandleVbucketMap(c *goweb.Context, cp *conf.ParsedInfo) {
 	c.WriteResponse(cp.V, 200)
 }
 
-func HandleDeadvBuckets(c *goweb.Context, cp *conf.ParsedInfo, co *cl.Client) {
+func HandleDeadvBuckets(c *goweb.Context, cp *conf.ParsedInfo, co *client.Client) {
 	if c.IsPost() || c.IsPut() {
 		var dvi conf.DeadVbucketInfo
 		if err := c.Fill(&dvi); err != nil {
@@ -36,12 +36,12 @@ func HandleDeadvBuckets(c *goweb.Context, cp *conf.ParsedInfo, co *cl.Client) {
 		ok, mp := cp.HandleDeadVbuckets(dvi, dvi.Server, false)
 		if ok {
 			//need to call it on client info
-			cl.PushNewConfig(co, mp)
+			client.PushNewConfig(co, mp)
 		}
 	}
 }
 
-func HandleServerDown(c *goweb.Context, cp *conf.ParsedInfo, co *cl.Client) {
+func HandleServerDown(c *goweb.Context, cp *conf.ParsedInfo, co *client.Client) {
 	defer func() {
 		recover()
 	}()
@@ -60,7 +60,7 @@ func HandleServerDown(c *goweb.Context, cp *conf.ParsedInfo, co *cl.Client) {
 		ok, mp := cp.HandleServerDown(si.Server)
 		if ok {
 			//need to call it on client info
-			cl.PushNewConfig(co, mp)
+			client.PushNewConfig(co, mp)
 		}
 	}
 }
@@ -86,3 +86,30 @@ func HandleCapacityUpdate(c *goweb.Context, cp *conf.ParsedInfo) {
 		cp.HandleCapacityUpdate(si)
 	}
 }
+
+func SetupHandlers(cp *conf.ParsedInfo, co *client.Client) {
+	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
+		HandleUpLoadConfig(c, cp)
+	})
+
+	goweb.MapFunc("/{version}/vbucketMap", func(c *goweb.Context) {
+		HandleVbucketMap(c, cp)
+	})
+
+	goweb.MapFunc("/{version}/deadvBuckets", func(c *goweb.Context) {
+		HandleDeadvBuckets(c, cp, co)
+	})
+
+	goweb.MapFunc("/{version}/serverDown", func(c *goweb.Context) {
+		HandleServerDown(c, cp, co)
+	})
+
+	goweb.MapFunc("/{version}/serverAlive", func(c *goweb.Context) {
+		HandleServerAlive(c, cp)
+	})
+
+	goweb.MapFunc("/{version}/capacityUpdate", func(c *goweb.Context) {
+		HandleCapacityUpdate(c, cp)
+	})
+}
+

@@ -1,4 +1,4 @@
-package clientHandler1
+package client
 
 import (
 	"bytes"
