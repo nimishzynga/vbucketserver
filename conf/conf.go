@@ -10,7 +10,7 @@ const (
 )
 
 
-func (c Conf) generatevBucketMap() (*[][]int, *[]int16, bool) {
+func (c Config) generatevBucketMap() (*[][]int, *[]int16, bool) {
 	serv := len(c.Servers)
 	capacityMap := make([]int16, len(c.Servers))
 	maxActive := int(c.Vbuckets) / serv
@@ -82,19 +82,19 @@ func (cp *Context) generateVBAmap() {
 	cp.VbaInfo = vbaMap
 }
 
-func (cp *Context) GenMap(con *Conf) {
-	if rv, cm, err := con.generatevBucketMap(); err == false {
+func (cp *Context) GenMap(cfg *Config) {
+	if rv, cm, err := cfg.generatevBucketMap(); err == false {
 		cp.M.Lock()
 		defer cp.M.Unlock()
 		cp.V.VBucketMap = *rv
-		cp.V.HashAlgorithm = con.Hash
-		cp.V.NumReplicas = int(con.Replica)
-		log.Println("serverlist is", con.Servers)
-		cp.V.ServerList = con.Servers
-		cp.C = *con //update the config
+		cp.V.HashAlgorithm = cfg.Hash
+		cp.V.NumReplicas = int(cfg.Replica)
+		log.Println("serverlist is", cfg.Servers)
+		cp.V.ServerList = cfg.Servers
+		cp.C = *cfg //update the cfgfig
 		cp.generateVBAmap()
-		log.Println("capacity is", con.Capacity)
-		cp.updateMaxCapacity(con.Capacity, len(con.Servers), cm)
+		log.Println("capacity is", cfg.Capacity)
+		cp.updateMaxCapacity(cfg.Capacity, len(cfg.Servers), cm)
 		log.Println("updated map ", cp.V)
 	} else {
 		log.Println("failed updated map ", err)

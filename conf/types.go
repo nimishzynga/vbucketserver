@@ -11,7 +11,7 @@ type ServerInfo struct {
 	NumberOfDisk    int16
 }
 
-type Conf struct {
+type Config struct {
 	Port     int16
 	Vbuckets int16
 	Replica  int16
@@ -56,7 +56,7 @@ type CapacityUpdateInfo struct {
 }
 
 type Context struct {
-	C       Conf         //input Conf
+	C       Config         //input Config
 	V       VBucketInfo  // vbucketMap to send to client
 	S       []ServerInfo // per server information
 	VbaInfo map[string]VbaEntry

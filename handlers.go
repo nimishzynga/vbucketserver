@@ -9,7 +9,7 @@ import (
 
 func HandleUpLoadConfig(c *goweb.Context, cp *conf.Context) {
 	if c.IsPost() || c.IsPut() {
-		var con conf.Conf
+		var con conf.Config
 		if err := c.Fill(&con); err != nil {
 			log.Println("got error", err)
 			return

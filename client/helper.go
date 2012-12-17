@@ -24,8 +24,8 @@ func getIpAddrWithPort(c net.Conn) string {
 }
 
 ///XXX:Put more validation checks for file inputs
-func parseInitialConfig(f string, cp *conf.Context) *conf.Conf {
-	con := &conf.Conf{}
+func parseInitialConfig(f string, cp *conf.Context) *conf.Config {
+	con := &conf.Config{}
 	fi, err := os.Open(f)
 	if err != nil {
 		//XXX:may be need to change here
@@ -102,7 +102,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 }
 
 //wait for VBA's to connect initially
-func waitForVBAs(c *conf.Conf, cp *conf.Context, to int, co *Client) {
+func waitForVBAs(c *conf.Config, cp *conf.Context, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
 	log.Println("sleep over for vbas")
 	checkVBAs(c, co.Vba)
@@ -147,7 +147,7 @@ func PushNewConfig(co *Client, m map[string]conf.VbaEntry) {
 }
 
 //update the servers list with the connected servers
-func checkVBAs(c *conf.Conf, v ClientInfoMap) *conf.Conf {
+func checkVBAs(c *conf.Config, v ClientInfoMap) *conf.Config {
 	v.Mu.RLock()
 	defer v.Mu.RUnlock()
 	connectedServs := []string{}
