@@ -2,12 +2,12 @@ package main
 
 import (
 	"code.google.com/p/goweb/goweb"
-    "log"
+	"log"
 	"vbucketserver/client"
 	"vbucketserver/conf"
 )
 
-func HandleUpLoadConfig(c *goweb.Context, cp *conf.Context) {
+func HandleUpLoadConfig(c *goweb.Context, cfgctx *conf.Context) {
 	if c.IsPost() || c.IsPut() {
 		var con conf.Config
 		if err := c.Fill(&con); err != nil {
@@ -15,17 +15,17 @@ func HandleUpLoadConfig(c *goweb.Context, cp *conf.Context) {
 			return
 		}
 		log.Println("data is", con)
-		cp.GenMap(&con)
+		cfgctx.GenMap(&con)
 	}
 }
 
-func HandleVbucketMap(c *goweb.Context, cp *conf.Context) {
-	cp.M.RLock()
-	defer cp.M.RUnlock()
-	c.WriteResponse(cp.V, 200)
+func HandleVbucketMap(c *goweb.Context, cfgctx *conf.Context) {
+	cfgctx.M.RLock()
+	defer cfgctx.M.RUnlock()
+	c.WriteResponse(cfgctx.V, 200)
 }
 
-func HandleDeadvBuckets(c *goweb.Context, cp *conf.Context, co *client.Client) {
+func HandleDeadvBuckets(c *goweb.Context, cfgctx *conf.Context, co *client.Client) {
 	if c.IsPost() || c.IsPut() {
 		var dvi conf.DeadVbucketInfo
 		if err := c.Fill(&dvi); err != nil {
@@ -33,14 +33,14 @@ func HandleDeadvBuckets(c *goweb.Context, cp *conf.Context, co *client.Client) {
 			return
 		}
 		log.Println("server is", dvi.Server)
-		ok, mp := cp.HandleDeadVbuckets(dvi, dvi.Server, false)
+		ok, mp := cfgctx.HandleDeadVbuckets(dvi, dvi.Server, false)
 		if ok {
 			client.PushNewConfig(co, mp)
 		}
 	}
 }
 
-func HandleServerDown(c *goweb.Context, cp *conf.Context, co *client.Client) {
+func HandleServerDown(c *goweb.Context, cfgctx *conf.Context, co *client.Client) {
 	defer func() {
 		recover()
 	}()
@@ -56,58 +56,57 @@ func HandleServerDown(c *goweb.Context, cp *conf.Context, co *client.Client) {
 			return
 		}
 		log.Println("downserver is", si.Server)
-		ok, mp := cp.HandleServerDown(si.Server)
+		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
 			client.PushNewConfig(co, mp)
 		}
 	}
 }
 
-func HandleServerAlive(c *goweb.Context, cp *conf.Context) {
+func HandleServerAlive(c *goweb.Context, cfgctx *conf.Context) {
 	if c.IsPost() || c.IsPut() {
 		var si conf.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			log.Println("got error", err)
 			return
 		}
-		cp.HandleServerAlive(si.Server)
+		cfgctx.HandleServerAlive(si.Server)
 	}
 }
 
-func HandleCapacityUpdate(c *goweb.Context, cp *conf.Context) {
+func HandleCapacityUpdate(c *goweb.Context, cfgctx *conf.Context) {
 	if c.IsPost() || c.IsPut() {
 		var si conf.CapacityUpdateInfo
 		if err := c.Fill(&si); err != nil {
 			log.Println("got error", err)
 			return
 		}
-		cp.HandleCapacityUpdate(si)
+		cfgctx.HandleCapacityUpdate(si)
 	}
 }
 
-func SetupHandlers(cp *conf.Context, co *client.Client) {
+func SetupHandlers(cfgctx *conf.Context, co *client.Client) {
 	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
-		HandleUpLoadConfig(c, cp)
+		HandleUpLoadConfig(c, cfgctx)
 	})
 
 	goweb.MapFunc("/{version}/vbucketMap", func(c *goweb.Context) {
-		HandleVbucketMap(c, cp)
+		HandleVbucketMap(c, cfgctx)
 	})
 
 	goweb.MapFunc("/{version}/deadvBuckets", func(c *goweb.Context) {
-		HandleDeadvBuckets(c, cp, co)
+		HandleDeadvBuckets(c, cfgctx, co)
 	})
 
 	goweb.MapFunc("/{version}/serverDown", func(c *goweb.Context) {
-		HandleServerDown(c, cp, co)
+		HandleServerDown(c, cfgctx, co)
 	})
 
 	goweb.MapFunc("/{version}/serverAlive", func(c *goweb.Context) {
-		HandleServerAlive(c, cp)
+		HandleServerAlive(c, cfgctx)
 	})
 
 	goweb.MapFunc("/{version}/capacityUpdate", func(c *goweb.Context) {
-		HandleCapacityUpdate(c, cp)
+		HandleCapacityUpdate(c, cfgctx)
 	})
 }
-
