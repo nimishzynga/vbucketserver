@@ -1,5 +1,5 @@
 //contains the helper functions
-package client
+package server
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
-	"vbucketserver/conf"
+	"vbucketserver/config"
 )
 
 func getIpAddr(c net.Conn) string {
@@ -24,8 +24,8 @@ func getIpAddrWithPort(c net.Conn) string {
 }
 
 ///XXX:Put more validation checks for file inputs
-func parseInitialConfig(f string, cp *conf.Context) *conf.Config {
-	con := &conf.Config{}
+func parseInitialConfig(f string, cp *config.Context) *config.Config {
+	con := &config.Config{}
 	fi, err := os.Open(f)
 	if err != nil {
 		//XXX:may be need to change here
@@ -74,7 +74,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 			m.Cmd = MSG_INIT_STR
 			return json.Marshal(m)
 		case MSG_CONFIG:
-			cp, _ := args[0].(*conf.Context)
+			cp, _ := args[0].(*config.Context)
 			t, _ := args[1].(int)
 			agent, _ := args[2].(string)
 			ip, _ := args[3].(string)
@@ -102,7 +102,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 }
 
 //wait for VBA's to connect initially
-func waitForVBAs(c *conf.Config, cp *conf.Context, to int, co *Client) {
+func waitForVBAs(c *config.Config, cp *config.Context, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
 	log.Println("sleep over for vbas")
 	checkVBAs(c, co.Vba)
@@ -111,7 +111,7 @@ func waitForVBAs(c *conf.Config, cp *conf.Context, to int, co *Client) {
 	co.Cond.Broadcast()
 }
 
-func getServerIndex(cp *conf.Context, sr string) int {
+func getServerIndex(cp *config.Context, sr string) int {
 	log.Println("input server is", sr, "all are", cp.C.Servers)
 	for s := range cp.C.Servers {
 		log.Println(strings.Split(cp.C.Servers[s], ":")[0])
@@ -124,7 +124,7 @@ func getServerIndex(cp *conf.Context, sr string) int {
 }
 
 //push the config to all the VBA's
-func PushNewConfig(co *Client, m map[string]conf.VbaEntry) {
+func PushNewConfig(co *Client, m map[string]config.VbaEntry) {
 	ma := make(map[string]int)
 	for _, en := range m {
 		if len(en.VbId) > 0 {
@@ -147,7 +147,7 @@ func PushNewConfig(co *Client, m map[string]conf.VbaEntry) {
 }
 
 //update the servers list with the connected servers
-func checkVBAs(c *conf.Config, v ClientInfoMap) *conf.Config {
+func checkVBAs(c *config.Config, v ClientInfoMap) *config.Config {
 	v.Mu.RLock()
 	defer v.Mu.RUnlock()
 	connectedServs := []string{}

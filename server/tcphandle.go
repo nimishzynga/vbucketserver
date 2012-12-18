@@ -1,4 +1,4 @@
-package client
+package server
 
 import (
 	"bytes"
@@ -8,7 +8,7 @@ import (
 	"net"
 	"os"
 	"time"
-	"vbucketserver/conf"
+	"vbucketserver/config"
 )
 
 //client states
@@ -63,14 +63,14 @@ const (
 
 type VbsClient interface {
 	ClientType() string
-	HandleInit(chan string, *conf.Context, *Client, int) bool
-	HandleFail(*RecvMsg, *conf.Context, *Client) bool
+	HandleInit(chan string, *config.Context, *Client, int) bool
+	HandleFail(*RecvMsg, *config.Context, *Client) bool
 	HandleOk(*RecvMsg) bool
 	HandleAlive(*RecvMsg) bool
-	HandleUpdateConfig(*conf.Context) bool
+	HandleUpdateConfig(*config.Context) bool
 }
 
-func HandleTcp(c *Client, cp *conf.Context, s string, confFile string) {
+func HandleTcp(c *Client, cp *config.Context, s string, confFile string) {
 	listener, err := net.Listen("tcp", s)
 	if err != nil {
 		log.Println("error listening:", err.Error())
@@ -93,7 +93,7 @@ func HandleTcp(c *Client, cp *conf.Context, s string, confFile string) {
 	}
 }
 
-func handleConn(conn net.Conn, co *Client, cp *conf.Context) {
+func handleConn(conn net.Conn, co *Client, cp *config.Context) {
 	ch := make(chan []byte)
 	go handleWrite(conn, ch)
 	handleRead(conn, ch, co, cp)
@@ -113,7 +113,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 	}
 }
 
-func handleRead(conn net.Conn, c chan []byte, co *Client, cp *conf.Context) {
+func handleRead(conn net.Conn, c chan []byte, co *Client, cp *config.Context) {
 	var state int = STATE_INIT_RES
 	data := []byte{}
 	fullData := []byte{}
@@ -246,7 +246,7 @@ func getClient(ct string, conn net.Conn, ch chan []byte) VbsClient {
 }
 
 func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
-	cp *conf.Context, i chan string, vc VbsClient) int {
+	cp *config.Context, i chan string, vc VbsClient) int {
 	if m != nil && m.Cmd == MSG_FAIL_STR {
 		if vc != nil {
 			vc.HandleFail(m, cp, co)

@@ -3,13 +3,13 @@ package main
 import (
 	"code.google.com/p/goweb/goweb"
 	"log"
-	"vbucketserver/client"
-	"vbucketserver/conf"
+	"vbucketserver/server"
+	"vbucketserver/config"
 )
 
-func HandleUpLoadConfig(c *goweb.Context, cfgctx *conf.Context) {
+func HandleUpLoadConfig(c *goweb.Context, cfgctx *config.Context) {
 	if c.IsPost() || c.IsPut() {
-		var con conf.Config
+		var con config.Config
 		if err := c.Fill(&con); err != nil {
 			log.Println("got error", err)
 			return
@@ -19,15 +19,15 @@ func HandleUpLoadConfig(c *goweb.Context, cfgctx *conf.Context) {
 	}
 }
 
-func HandleVbucketMap(c *goweb.Context, cfgctx *conf.Context) {
+func HandleVbucketMap(c *goweb.Context, cfgctx *config.Context) {
 	cfgctx.M.RLock()
 	defer cfgctx.M.RUnlock()
 	c.WriteResponse(cfgctx.V, 200)
 }
 
-func HandleDeadvBuckets(c *goweb.Context, cfgctx *conf.Context, co *client.Client) {
+func HandleDeadvBuckets(c *goweb.Context, cfgctx *config.Context, co *server.Client) {
 	if c.IsPost() || c.IsPut() {
-		var dvi conf.DeadVbucketInfo
+		var dvi config.DeadVbucketInfo
 		if err := c.Fill(&dvi); err != nil {
 			log.Println("got error", err)
 			return
@@ -35,17 +35,17 @@ func HandleDeadvBuckets(c *goweb.Context, cfgctx *conf.Context, co *client.Clien
 		log.Println("server is", dvi.Server)
 		ok, mp := cfgctx.HandleDeadVbuckets(dvi, dvi.Server, false)
 		if ok {
-			client.PushNewConfig(co, mp)
+			server.PushNewConfig(co, mp)
 		}
 	}
 }
 
-func HandleServerDown(c *goweb.Context, cfgctx *conf.Context, co *client.Client) {
+func HandleServerDown(c *goweb.Context, cfgctx *config.Context, co *server.Client) {
 	defer func() {
 		recover()
 	}()
 	if c.IsPost() || c.IsPut() {
-		var si conf.ServerUpDownInfo
+		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			log.Println("got error", err)
 			return
@@ -58,14 +58,14 @@ func HandleServerDown(c *goweb.Context, cfgctx *conf.Context, co *client.Client)
 		log.Println("downserver is", si.Server)
 		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
-			client.PushNewConfig(co, mp)
+			server.PushNewConfig(co, mp)
 		}
 	}
 }
 
-func HandleServerAlive(c *goweb.Context, cfgctx *conf.Context) {
+func HandleServerAlive(c *goweb.Context, cfgctx *config.Context) {
 	if c.IsPost() || c.IsPut() {
-		var si conf.ServerUpDownInfo
+		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			log.Println("got error", err)
 			return
@@ -74,9 +74,9 @@ func HandleServerAlive(c *goweb.Context, cfgctx *conf.Context) {
 	}
 }
 
-func HandleCapacityUpdate(c *goweb.Context, cfgctx *conf.Context) {
+func HandleCapacityUpdate(c *goweb.Context, cfgctx *config.Context) {
 	if c.IsPost() || c.IsPut() {
-		var si conf.CapacityUpdateInfo
+		var si config.CapacityUpdateInfo
 		if err := c.Fill(&si); err != nil {
 			log.Println("got error", err)
 			return
@@ -85,7 +85,7 @@ func HandleCapacityUpdate(c *goweb.Context, cfgctx *conf.Context) {
 	}
 }
 
-func SetupHandlers(cfgctx *conf.Context, co *client.Client) {
+func SetupHandlers(cfgctx *config.Context, co *server.Client) {
 	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
 		HandleUpLoadConfig(c, cfgctx)
 	})

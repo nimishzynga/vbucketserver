@@ -5,8 +5,8 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"vbucketserver/client"
-	"vbucketserver/conf"
+	"vbucketserver/server"
+	"vbucketserver/config"
 )
 import _ "net/http/pprof"
 
@@ -17,10 +17,10 @@ func main() {
 
 	goweb.ConfigureDefaultFormatters()
 
-	var cp conf.Context
-	h := client.NewClient()
+	var cp config.Context
+	h := server.NewClient()
 	SetupHandlers(&cp, h)
-	go client.HandleTcp(h, &cp, *port, *file)
+	go server.HandleTcp(h, &cp, *port, *file)
 
 	go func() {
 		log.Println(http.ListenAndServe(":8080", nil))

@@ -1,9 +1,9 @@
-package client
+package server
 
 import (
 	"net"
 	"sync"
-	"vbucketserver/conf"
+	"vbucketserver/config"
 )
 
 //file contains the struct for client handling
@@ -49,13 +49,13 @@ type InitMsg struct {
 
 type ConfigMsg struct {
 	Cmd           string
-	Data          conf.VBucketInfo
+	Data          config.VBucketInfo
 	HeartBeatTime int
 }
 
 type ConfigVbaMsg struct {
 	Cmd           string
-	Data          []conf.VbaEntry
+	Data          []config.VbaEntry
 	HeartBeatTime int
 }
 

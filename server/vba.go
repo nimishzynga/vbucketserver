@@ -1,9 +1,9 @@
-package client
+package server
 
 import (
 	"log"
 	"net"
-	"vbucketserver/conf"
+	"vbucketserver/config"
 )
 
 type GenericClient struct {
@@ -27,7 +27,7 @@ func (gc *GenericClient) HandleAlive(m *RecvMsg) bool {
 	return false
 }
 
-func (gc *GenericClient) HandleInit(ch chan string, cp *conf.Context, co *Client, c int) bool {
+func (gc *GenericClient) HandleInit(ch chan string, cp *config.Context, co *Client, c int) bool {
 	_ = ch
 	_ = cp
 	_ = co
@@ -35,7 +35,7 @@ func (gc *GenericClient) HandleInit(ch chan string, cp *conf.Context, co *Client
 	return false
 }
 
-func (gc *GenericClient) HandleFail(m *RecvMsg, cp *conf.Context, co *Client) bool {
+func (gc *GenericClient) HandleFail(m *RecvMsg, cp *config.Context, co *Client) bool {
 	_ = cp
 	_ = m
 	_ = co
@@ -43,7 +43,7 @@ func (gc *GenericClient) HandleFail(m *RecvMsg, cp *conf.Context, co *Client) bo
 	return false
 }
 
-func (gc *GenericClient) HandleUpdateConfig(cp *conf.Context) bool {
+func (gc *GenericClient) HandleUpdateConfig(cp *config.Context) bool {
 	_ = gc
 	return false
 }
@@ -59,7 +59,7 @@ func (mc *MoxiClient) ClientType() string {
 }
 
 //it shoudl be for mcs client
-func (mc *MoxiClient) HandleFail(m *RecvMsg, cp *conf.Context, co *Client) bool {
+func (mc *MoxiClient) HandleFail(m *RecvMsg, cp *config.Context, co *Client) bool {
 	log.Println("inside handleFail")
 	ok, mp := cp.HandleServerDown(m.Server)
 	if ok {
@@ -69,7 +69,7 @@ func (mc *MoxiClient) HandleFail(m *RecvMsg, cp *conf.Context, co *Client) bool 
 	return true
 }
 
-func (mc *MoxiClient) HandleInit(ch chan string, cp *conf.Context, co *Client, c int) bool {
+func (mc *MoxiClient) HandleInit(ch chan string, cp *config.Context, co *Client, c int) bool {
 	_ = c
 	Insert(mc.conn, ch, co, CLIENT_MOXI)
 	co.Cond.L.Lock()
@@ -84,7 +84,7 @@ func (mc *MoxiClient) HandleInit(ch chan string, cp *conf.Context, co *Client, c
 	return false
 }
 
-func (mc *MoxiClient) HandleUpdateConfig(cp *conf.Context) bool {
+func (mc *MoxiClient) HandleUpdateConfig(cp *config.Context) bool {
 	if m, err := getMsg(MSG_CONFIG, cp, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
 		mc.ch <- m
 		return true
@@ -102,7 +102,7 @@ func (vc *VbaClient) ClientType() string {
 	return CLIENT_VBA
 }
 
-func (vc *VbaClient) HandleInit(ch chan string, cp *conf.Context, co *Client, capacity int) bool {
+func (vc *VbaClient) HandleInit(ch chan string, cp *config.Context, co *Client, capacity int) bool {
 	Insert(vc.conn, ch, co, CLIENT_VBA)
 	co.Cond.L.Lock()
 	for co.Started == false {
@@ -125,7 +125,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cp *conf.Context, co *Client, ca
 	return false
 }
 
-func (vc *VbaClient) HandleUpdateConfig(cp *conf.Context) bool {
+func (vc *VbaClient) HandleUpdateConfig(cp *config.Context) bool {
 	if m, err := getMsg(MSG_CONFIG, cp, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
 		vc.ch <- m
 		return true

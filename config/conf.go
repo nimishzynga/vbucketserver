@@ -1,4 +1,4 @@
-package conf
+package config
 
 import (
 	"math/rand"
