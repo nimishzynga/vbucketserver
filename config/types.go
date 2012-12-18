@@ -56,7 +56,7 @@ type CapacityUpdateInfo struct {
 }
 
 type Context struct {
-	C       Config         //input Config
+	C       Config       //input Config
 	V       VBucketInfo  // vbucketMap to send to client
 	S       []ServerInfo // per server information
 	VbaInfo map[string]VbaEntry

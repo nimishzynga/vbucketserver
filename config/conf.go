@@ -1,14 +1,13 @@
 package config
 
 import (
+	"log"
 	"math/rand"
-    "log"
 )
 
 const (
 	DEAD_NODE_IP = "0.0.0.0:11211"
 )
-
 
 func (c Config) generatevBucketMap() (*[][]int, *[]int16, bool) {
 	serv := len(c.Servers)

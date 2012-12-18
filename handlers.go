@@ -3,8 +3,8 @@ package main
 import (
 	"code.google.com/p/goweb/goweb"
 	"log"
-	"vbucketserver/server"
 	"vbucketserver/config"
+	"vbucketserver/server"
 )
 
 func HandleUpLoadConfig(c *goweb.Context, cfgctx *config.Context) {
