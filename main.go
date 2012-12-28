@@ -17,10 +17,10 @@ func main() {
 
 	goweb.ConfigureDefaultFormatters()
 
-	var cp config.Context
+    cls := config.NewCluster()
 	h := server.NewClient()
-	SetupHandlers(&cp, h)
-	go server.HandleTcp(h, &cp, *addr, *cfg)
+	SetupHandlers(cls, h)
+	go server.HandleTcp(h, cls, *addr, *cfg)
 
 	go func() {
 		log.Println(http.ListenAndServe(":8080", nil))

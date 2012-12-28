@@ -63,40 +63,40 @@ const (
 
 type VbsClient interface {
 	ClientType() string
-	HandleInit(chan string, *config.Context, *Client, int) bool
-	HandleFail(*RecvMsg, *config.Context, *Client) bool
+	HandleInit(chan string, *config.Cluster, *Client, int) bool
+	HandleFail(*RecvMsg, *config.Cluster, *Client) bool
 	HandleOk(*RecvMsg) bool
 	HandleAlive(*RecvMsg) bool
-	HandleUpdateConfig(*config.Context) bool
+	HandleUpdateConfig(*config.Cluster) bool
 }
 
-func HandleTcp(c *Client, cp *config.Context, s string, confFile string) {
+func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
 	listener, err := net.Listen("tcp", s)
 	if err != nil {
 		log.Println("error listening:", err.Error())
 		os.Exit(1)
 	}
 	//parse the conf file
-	con := parseInitialConfig(confFile, cp)
-	if con == nil {
-		return
-	}
+    if ok := parseInitialConfig(confFile, cls); ok == false {
+        log.Println("Unable to parse the config")
+        return
+    }
 	//wait for VBA's to connect
-	go waitForVBAs(con, cp, VBA_WAIT_TIME, c)
+	go waitForVBAs(cls, VBA_WAIT_TIME, c)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Println("Error accept:", err.Error())
 			return
 		}
-		go handleConn(conn, c, cp)
+		go handleConn(conn, c, cls)
 	}
 }
 
-func handleConn(conn net.Conn, co *Client, cp *config.Context) {
+func handleConn(conn net.Conn, co *Client, cls *config.Cluster) {
 	ch := make(chan []byte)
 	go handleWrite(conn, ch)
-	handleRead(conn, ch, co, cp)
+	handleRead(conn, ch, co, cls)
 }
 
 func handleWrite(conn net.Conn, ch chan []byte) {
@@ -113,7 +113,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 	}
 }
 
-func handleRead(conn net.Conn, c chan []byte, co *Client, cp *config.Context) {
+func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 	var state int = STATE_INIT_RES
 	data := []byte{}
 	fullData := []byte{}
@@ -213,7 +213,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cp *config.Context) {
 				vc = getClient(m.Agent, conn, c)
 			}
 
-			switch ret := handleMsg(m, conn, &state, c, co, cp, c3, vc); ret {
+			switch ret := handleMsg(m, conn, &state, c, co, cls, c3, vc); ret {
 			case STATUS_ERR:
 				return
 			case STATUS_SUCCESS:
@@ -246,15 +246,15 @@ func getClient(ct string, conn net.Conn, ch chan []byte) VbsClient {
 }
 
 func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
-	cp *config.Context, i chan string, vc VbsClient) int {
+	cls *config.Cluster, i chan string, vc VbsClient) int {
 	if m != nil && m.Cmd == MSG_FAIL_STR {
 		if vc != nil {
-			vc.HandleFail(m, cp, co)
+			vc.HandleFail(m, cls, co)
 		}
 	} else {
 		switch *s {
 		case STATE_INIT_RES:
-			vc.HandleInit(i, cp, co, m.Capacity)
+			vc.HandleInit(i, cls, co, m.Capacity)
 			*s = STATE_CONFIG_RES
 
 		case STATE_CONFIG_RES:
@@ -269,7 +269,7 @@ func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 			}
 
 		case STATE_UPDATE_CONFIG:
-			if vc.HandleUpdateConfig(cp) == false {
+			if vc.HandleUpdateConfig(cls) == false {
 				return STATUS_ERR
 			}
 			*s = STATE_CONFIG_RES

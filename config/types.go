@@ -11,6 +11,13 @@ type ServerInfo struct {
 	NumberOfDisk    int16
 }
 
+type Cluster struct {
+    ContextMap   map[string]*Context //cluster name to context
+    ConfigMap   map[string]Config    //cluster name to config
+    IpMap       map[string]string  //ip addess to cluster name
+    M  sync.RWMutex
+}
+
 type Config struct {
 	Port     int16
 	Vbuckets int16
@@ -18,13 +25,20 @@ type Config struct {
 	Hash     string
 	Capacity int16
 	Servers  []string
+    SecondaryIps []string
 }
 
-type VBucketInfo struct {
+type VbucketServerMap struct {
 	VBucketMap    [][]int  `json:"vBucketMap"`
 	HashAlgorithm string   `json:"hashAlgorithm"`
 	NumReplicas   int      `json:"numReplicas"`
 	ServerList    []string `json:"serverList"`
+}
+
+type VBucketInfo struct {
+    Port     int16         `json:"port"`
+    Name     string   `json:"name"`
+    Smap     VbucketServerMap `json:"vBucketServerMap"`
 }
 
 type DeadVbucketInfo struct {
@@ -38,12 +52,6 @@ type VbaEntry struct {
 	Source      string
 	VbId        []int
 	Destination string
-}
-
-type stateEntry struct {
-	server int
-	vbid   int
-	state  string
 }
 
 type ServerUpDownInfo struct {
@@ -63,11 +71,11 @@ type Context struct {
 	M       sync.RWMutex
 }
 
-func NewStateEntry(s int, vbid int, st string) stateEntry {
-	se := stateEntry{
-		server: s,
-		vbid:   vbid,
-		state:  st,
-	}
-	return se
+func NewCluster() *Cluster {
+    cl := &Cluster{
+        ContextMap : make(map[string]*Context),
+        ConfigMap: make(map[string]Config),
+        IpMap: make(map[string]string),
+    }
+    return cl
 }

@@ -27,7 +27,7 @@ func (gc *GenericClient) HandleAlive(m *RecvMsg) bool {
 	return false
 }
 
-func (gc *GenericClient) HandleInit(ch chan string, cp *config.Context, co *Client, c int) bool {
+func (gc *GenericClient) HandleInit(ch chan string, cp *config.Cluster, co *Client, c int) bool {
 	_ = ch
 	_ = cp
 	_ = co
@@ -35,7 +35,7 @@ func (gc *GenericClient) HandleInit(ch chan string, cp *config.Context, co *Clie
 	return false
 }
 
-func (gc *GenericClient) HandleFail(m *RecvMsg, cp *config.Context, co *Client) bool {
+func (gc *GenericClient) HandleFail(m *RecvMsg, cp *config.Cluster, co *Client) bool {
 	_ = cp
 	_ = m
 	_ = co
@@ -43,7 +43,7 @@ func (gc *GenericClient) HandleFail(m *RecvMsg, cp *config.Context, co *Client) 
 	return false
 }
 
-func (gc *GenericClient) HandleUpdateConfig(cp *config.Context) bool {
+func (gc *GenericClient) HandleUpdateConfig(cp *config.Cluster) bool {
 	_ = gc
 	return false
 }
@@ -58,9 +58,14 @@ func (mc *MoxiClient) ClientType() string {
 	return CLIENT_MOXI
 }
 
-//it shoudl be for mcs client
-func (mc *MoxiClient) HandleFail(m *RecvMsg, cp *config.Context, co *Client) bool {
+//it should be for mcs client
+func (mc *MoxiClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
 	log.Println("inside handleFail")
+    cp := cls.GetContext(getIpAddr(mc.conn))
+    if cp == nil {
+        log.Println("Not able to find context for", getIpAddr(mc.conn))
+        return false
+    }
 	ok, mp := cp.HandleServerDown(m.Server)
 	if ok {
 		//need to call it on client info
@@ -69,7 +74,7 @@ func (mc *MoxiClient) HandleFail(m *RecvMsg, cp *config.Context, co *Client) boo
 	return true
 }
 
-func (mc *MoxiClient) HandleInit(ch chan string, cp *config.Context, co *Client, c int) bool {
+func (mc *MoxiClient) HandleInit(ch chan string, cls *config.Cluster, co *Client, c int) bool {
 	_ = c
 	Insert(mc.conn, ch, co, CLIENT_MOXI)
 	co.Cond.L.Lock()
@@ -77,15 +82,15 @@ func (mc *MoxiClient) HandleInit(ch chan string, cp *config.Context, co *Client,
 		co.Cond.Wait()
 	}
 	co.Cond.L.Unlock()
-	if m, err := getMsg(MSG_CONFIG, cp, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
 		mc.ch <- m
 		return true
 	}
 	return false
 }
 
-func (mc *MoxiClient) HandleUpdateConfig(cp *config.Context) bool {
-	if m, err := getMsg(MSG_CONFIG, cp, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
+func (mc *MoxiClient) HandleUpdateConfig(cls *config.Cluster) bool {
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
 		mc.ch <- m
 		return true
 	}
@@ -102,13 +107,18 @@ func (vc *VbaClient) ClientType() string {
 	return CLIENT_VBA
 }
 
-func (vc *VbaClient) HandleInit(ch chan string, cp *config.Context, co *Client, capacity int) bool {
+func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client, capacity int) bool {
 	Insert(vc.conn, ch, co, CLIENT_VBA)
 	co.Cond.L.Lock()
 	for co.Started == false {
 		co.Cond.Wait()
 	}
 	co.Cond.L.Unlock()
+    cp := cls.GetContext(getIpAddr(vc.conn))
+    if cp == nil {
+        log.Println("Not able to find context for", getIpAddr(vc.conn))
+        return false
+    }
 	index := getServerIndex(cp, getIpAddr(vc.conn))
 	if index == -1 {
 		log.Println("Server not in list", getIpAddr(vc.conn))
@@ -118,15 +128,15 @@ func (vc *VbaClient) HandleInit(ch chan string, cp *config.Context, co *Client, 
 	si.NumberOfDisk = int16(capacity)
 	cp.S[index] = si
 
-	if m, err := getMsg(MSG_CONFIG, cp, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
 		vc.ch <- m
 		return true
 	}
 	return false
 }
 
-func (vc *VbaClient) HandleUpdateConfig(cp *config.Context) bool {
-	if m, err := getMsg(MSG_CONFIG, cp, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
+func (vc *VbaClient) HandleUpdateConfig(cls *config.Cluster) bool {
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
 		vc.ch <- m
 		return true
 	}

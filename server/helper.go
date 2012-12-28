@@ -24,8 +24,7 @@ func getIpAddrWithPort(c net.Conn) string {
 }
 
 ///XXX:Put more validation checks for file inputs
-func parseInitialConfig(f string, cp *config.Context) *config.Config {
-	con := &config.Config{}
+func parseInitialConfig(f string, cls *config.Cluster) bool {
 	fi, err := os.Open(f)
 	if err != nil {
 		//XXX:may be need to change here
@@ -38,15 +37,26 @@ func parseInitialConfig(f string, cp *config.Context) *config.Config {
 	if err != nil {
 		panic(err)
 	}
-	if err := json.Unmarshal(buf, con); err != nil {
+	if err := json.Unmarshal(buf, &cls.ConfigMap); err != nil {
 		log.Println("error in unmarshalling")
-		return nil
+		return false
 	}
+    /*
+    for key, val := range con.ConfigMap {
+        for i:= range val. 
+    }
+    */
+    log.Println("con is", cls)
+    if cls.GenerateIpMap() == false {
+        log.Fatal("Same ip in two pools.Input config is not correct")
+    }
+    /*
 	if con.Replica <= 0 || con.Capacity <= 0 || len(con.Servers) == 0 {
 		log.Println("Invalid configuration data")
 		return nil
 	}
-	return con
+    */
+	return true
 }
 
 //return the client type
@@ -74,23 +84,48 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 			m.Cmd = MSG_INIT_STR
 			return json.Marshal(m)
 		case MSG_CONFIG:
-			cp, _ := args[0].(*config.Context)
+			cls, _ := args[0].(*config.Cluster)
 			t, _ := args[1].(int)
 			agent, _ := args[2].(string)
 			ip, _ := args[3].(string)
-			cp.M.RLock()
-			defer cp.M.RUnlock()
-			log.Println("agent is", agent)
 			if agent == CLIENT_MOXI {
-				m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: cp.V, HeartBeatTime: t}
+                data := ClusterVbucketMap{}
+                for _,cp := range cls.ContextMap {
+			        cp.M.RLock()
+                    data.Buckets = append(data.Buckets, cp.V)
+			        cp.M.RUnlock()
+                }
+			    log.Println("agent is", agent)
+				m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: data, HeartBeatTime: t}
 				return json.Marshal(m)
 			} else {
 				m := ConfigVbaMsg{Cmd: MSG_CONFIG_STR, HeartBeatTime: t}
+                cp := cls.GetContext(ip)
+                if cp == nil {
+                    break
+                }
 				for _, entry := range cp.VbaInfo {
-					if strings.Split(entry.Source, ":")[0] == ip {
-						m.Data = append(m.Data, entry)
-					}
-				}
+                    if strings.Split(entry.Source, ":")[0] == ip {
+                        if index := getServerIndex(cp, ip); index != -1 {
+                            if len(cp.C.SecondaryIps) > index {
+                                if secondIp := cp.C.SecondaryIps[index];secondIp != "" {
+                                    entry.Source = cp.C.SecondaryIps[index]
+                                }
+                            }
+                         }
+                         dest := strings.Split(entry.Destination, ":")[0]
+                         if dest != "" {
+                             if index := getServerIndex(cp, dest); index != -1 {
+                                 if len(cp.C.SecondaryIps) > index {
+                                     if secondIp := cp.C.SecondaryIps[index];secondIp != "" {
+                                         entry.Destination = cp.C.SecondaryIps[index]
+                                     }
+                                 }
+                             }
+                         }
+                        m.Data = append(m.Data, entry)
+                    }
+                }
 				return json.Marshal(m)
 			}
 		}
@@ -102,11 +137,17 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 }
 
 //wait for VBA's to connect initially
-func waitForVBAs(c *config.Config, cp *config.Context, to int, co *Client) {
+func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
 	log.Println("sleep over for vbas")
-	checkVBAs(c, co.Vba)
-	cp.GenMap(c)
+    cls.M.Lock()
+    for key,cfg := range cls.ConfigMap {
+	    checkVBAs(&cfg, co.Vba)
+        cp := &config.Context{}
+	    cp.GenMap(key, &cfg)
+        cls.ContextMap[key] = cp
+    }
+    cls.M.Unlock()
 	co.Started = true
 	co.Cond.Broadcast()
 }

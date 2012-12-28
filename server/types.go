@@ -47,9 +47,13 @@ type InitMsg struct {
 	Cmd string
 }
 
+type ClusterVbucketMap struct {
+    Buckets []config.VBucketInfo `json:"buckets"`
+}
+
 type ConfigMsg struct {
 	Cmd           string
-	Data          config.VBucketInfo
+	Data          ClusterVbucketMap
 	HeartBeatTime int
 }
 
