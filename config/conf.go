@@ -79,7 +79,7 @@ func (cp *Context) generateVBAmap() {
 			vbaMap[hashKey] = entry
 		} else {
 			for j := 1; j < len(m[i]); j++ {
-				hashKey := server
+				hashKey := server + serverList[m[i][j]]
 				if entry, ok = vbaMap[hashKey]; ok {
 					entry.VbId = append(entry.VbId, i)
 				} else {
@@ -293,6 +293,7 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
             i++
         }
     }
+    log.Println("Failed vbuckets :", dvi)
 	log.Println("old vbucket map was", vbucketMa)
 	cp.reduceCapacity(ser, dvi.DisksFailed, int16(len(dvi.Active)+len(dvi.Replica)))
 	if cp.V.Smap.NumReplicas == 0 {

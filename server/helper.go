@@ -114,7 +114,6 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					break
 				}
 				for _, entry := range cp.VbaInfo {
-                    log.Println("get msg vbamap is", cp.VbaInfo)
 					if strings.Split(entry.Source, ":")[0] == ip {
 						if index := getServerIndex(cp, ip); index != -1 {
 							if len(cp.C.SecondaryIps) > index {
@@ -179,11 +178,12 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry) {
 	for _, en := range m {
 		if len(en.VbId) > 0 {
 			co.Vba.Mu.Lock()
-			if _, o := ma[en.Source]; o == false {
-				if val, ok := co.Vba.Ma[en.Source]; ok {
+            ip := strings.Split(en.Source, ":")[0]
+			if _, o := ma[ip]; o == false {
+				if val, ok := co.Vba.Ma[ip]; ok {
 					val.C <- CHN_NOTIFY_STR
 				}
-				ma[en.Source] = 1
+				ma[ip] = 1
 			}
 			co.Vba.Mu.Unlock()
 		}
