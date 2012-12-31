@@ -178,7 +178,7 @@ func (cp *Context) reduceCapacity(s int, n int, c int16) {
 			log.Println("Disk is Zero for", s)
 			return
 		}
-		cp.S[s].maxVbuckets -= cp.S[s].maxVbuckets / cp.S[s].NumberOfDisk
+		cp.S[s].maxVbuckets -= (int16(n)*cp.S[s].maxVbuckets) / cp.S[s].NumberOfDisk
 		cp.S[s].currentVbuckets -= c
 	}
 }
