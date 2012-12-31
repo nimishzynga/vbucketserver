@@ -12,20 +12,20 @@ type ServerInfo struct {
 }
 
 type Cluster struct {
-    ContextMap   map[string]*Context //cluster name to context
-    ConfigMap   map[string]Config    //cluster name to config
-    IpMap       map[string]string  //ip addess to cluster name
-    M  sync.RWMutex
+	ContextMap map[string]*Context //cluster name to context
+	ConfigMap  map[string]Config   //cluster name to config
+	IpMap      map[string]string   //ip addess to cluster name
+	M          sync.RWMutex
 }
 
 type Config struct {
-	Port     int16
-	Vbuckets int16
-	Replica  int16
-	Hash     string
-	Capacity int16
-	Servers  []string
-    SecondaryIps []string
+	Port         int16
+	Vbuckets     int16
+	Replica      int16
+	Hash         string
+	Capacity     int16
+	Servers      []string
+	SecondaryIps []string
 }
 
 type VbucketServerMap struct {
@@ -36,9 +36,9 @@ type VbucketServerMap struct {
 }
 
 type VBucketInfo struct {
-    Port     int16         `json:"port"`
-    Name     string   `json:"name"`
-    Smap     VbucketServerMap `json:"vBucketServerMap"`
+	Port int16            `json:"port"`
+	Name string           `json:"name"`
+	Smap VbucketServerMap `json:"vBucketServerMap"`
 }
 
 type DeadVbucketInfo struct {
@@ -72,10 +72,10 @@ type Context struct {
 }
 
 func NewCluster() *Cluster {
-    cl := &Cluster{
-        ContextMap : make(map[string]*Context),
-        ConfigMap: make(map[string]Config),
-        IpMap: make(map[string]string),
-    }
-    return cl
+	cl := &Cluster{
+		ContextMap: make(map[string]*Context),
+		ConfigMap:  make(map[string]Config),
+		IpMap:      make(map[string]string),
+	}
+	return cl
 }

@@ -9,30 +9,30 @@ import (
 
 func HandleUpLoadConfig(c *goweb.Context, cls *config.Cluster) {
 	if c.IsPost() || c.IsPut() {
-        clsNew := config.NewCluster()
+		clsNew := config.NewCluster()
 		if err := c.Fill(&clsNew); err != nil {
 			log.Println("got error", err)
 			return
 		}
 		log.Println("data is", clsNew)
-        for key,cfg := range clsNew.ConfigMap {
-            cp := &config.Context{}
-            cp.GenMap(key, &cfg)
-            cls.ContextMap[key] = cp
-        }
-        *cls = *clsNew
+		for key, cfg := range clsNew.ConfigMap {
+			cp := &config.Context{}
+			cp.GenMap(key, &cfg)
+			cls.ContextMap[key] = cp
+		}
+		*cls = *clsNew
 	}
 }
 
 func HandleVbucketMap(c *goweb.Context, cls *config.Cluster) {
 	cls.M.RLock()
 	defer cls.M.RUnlock()
-    data := make(map[string]config.VBucketInfo)
-    for key,cp := range cls.ContextMap {
-        cp.M.RLock()
-        data[key] = cp.V
-        cp.M.RUnlock()
-    }
+	data := make(map[string]config.VBucketInfo)
+	for key, cp := range cls.ContextMap {
+		cp.M.RLock()
+		data[key] = cp.V
+		cp.M.RUnlock()
+	}
 	c.WriteResponse(data, 200)
 }
 
@@ -44,11 +44,11 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 			return
 		}
 		log.Println("server is", dvi.Server)
-        cp := cls.GetContext(dvi.Server)
-        if cp == nil {
-            log.Println("Context not found for", dvi.Server)
-            return
-        }
+		cp := cls.GetContext(dvi.Server)
+		if cp == nil {
+			log.Println("Context not found for", dvi.Server)
+			return
+		}
 		ok, mp := cp.HandleDeadVbuckets(dvi, dvi.Server, false)
 		if ok {
 			server.PushNewConfig(co, mp)
@@ -71,12 +71,12 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 			log.Println("server is null")
 			return
 		}
-        cfgctx := cls.GetContext(si.Server)
-        if cfgctx == nil {
-            log.Println("Context not found for", si.Server)
-            return
-        }
-        log.Println("downserver is", si.Server)
+		cfgctx := cls.GetContext(si.Server)
+		if cfgctx == nil {
+			log.Println("Context not found for", si.Server)
+			return
+		}
+		log.Println("downserver is", si.Server)
 		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
 			server.PushNewConfig(co, mp)
@@ -91,11 +91,11 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
 			log.Println("got error", err)
 			return
 		}
-        cfgctx := cls.GetContext(si.Server)
-        if cfgctx == nil {
-            log.Println("Context not found for", si.Server)
-            return
-        }
+		cfgctx := cls.GetContext(si.Server)
+		if cfgctx == nil {
+			log.Println("Context not found for", si.Server)
+			return
+		}
 		cfgctx.HandleServerAlive(si.Server)
 	}
 }
@@ -107,11 +107,11 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 			log.Println("got error", err)
 			return
 		}
-        cfgctx := cls.GetContext(si.Server)
-        if cfgctx == nil {
-            log.Println("Context not found for", si.Server)
-            return
-        }
+		cfgctx := cls.GetContext(si.Server)
+		if cfgctx == nil {
+			log.Println("Context not found for", si.Server)
+			return
+		}
 		cfgctx.HandleCapacityUpdate(si)
 	}
 }

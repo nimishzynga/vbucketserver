@@ -61,11 +61,11 @@ func (mc *MoxiClient) ClientType() string {
 //it should be for mcs client
 func (mc *MoxiClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
 	log.Println("inside handleFail")
-    cp := cls.GetContext(getIpAddr(mc.conn))
-    if cp == nil {
-        log.Println("Not able to find context for", getIpAddr(mc.conn))
-        return false
-    }
+	cp := cls.GetContext(getIpAddr(mc.conn))
+	if cp == nil {
+		log.Println("Not able to find context for", getIpAddr(mc.conn))
+		return false
+	}
 	ok, mp := cp.HandleServerDown(m.Server)
 	if ok {
 		//need to call it on client info
@@ -114,11 +114,11 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 		co.Cond.Wait()
 	}
 	co.Cond.L.Unlock()
-    cp := cls.GetContext(getIpAddr(vc.conn))
-    if cp == nil {
-        log.Println("Not able to find context for", getIpAddr(vc.conn))
-        return false
-    }
+	cp := cls.GetContext(getIpAddr(vc.conn))
+	if cp == nil {
+		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		return false
+	}
 	index := getServerIndex(cp, getIpAddr(vc.conn))
 	if index == -1 {
 		log.Println("Server not in list", getIpAddr(vc.conn))

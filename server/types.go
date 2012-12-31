@@ -48,7 +48,7 @@ type InitMsg struct {
 }
 
 type ClusterVbucketMap struct {
-    Buckets []config.VBucketInfo `json:"buckets"`
+	Buckets []config.VBucketInfo `json:"buckets"`
 }
 
 type ConfigMsg struct {
@@ -73,7 +73,7 @@ func NewClientInfoMap() ClientInfoMap {
 func NewClient() *Client {
 	cl := &Client{
 		Started: false,
-		Cond:     sync.NewCond(new(sync.Mutex)),
+		Cond:    sync.NewCond(new(sync.Mutex)),
 		Moxi:    NewClientInfoMap(),
 		Vba:     NewClientInfoMap(),
 		Cli:     NewClientInfoMap(),

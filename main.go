@@ -17,7 +17,7 @@ func main() {
 
 	goweb.ConfigureDefaultFormatters()
 
-    cls := config.NewCluster()
+	cls := config.NewCluster()
 	h := server.NewClient()
 	SetupHandlers(cls, h)
 	go server.HandleTcp(h, cls, *addr, *cfg)

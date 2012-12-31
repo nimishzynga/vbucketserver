@@ -3,6 +3,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"log"
 	"net"
@@ -41,22 +42,30 @@ func parseInitialConfig(f string, cls *config.Cluster) bool {
 		log.Println("error in unmarshalling")
 		return false
 	}
-    /*
-    for key, val := range con.ConfigMap {
-        for i:= range val. 
-    }
-    */
-    log.Println("con is", cls)
-    if cls.GenerateIpMap() == false {
-        log.Fatal("Same ip in two pools.Input config is not correct")
-    }
-    /*
-	if con.Replica <= 0 || con.Capacity <= 0 || len(con.Servers) == 0 {
-		log.Println("Invalid configuration data")
-		return nil
+	log.Println("Cluster config is ", cls)
+	cls.M.Lock()
+	if cls.GenerateIpMap() == false {
+		log.Fatal("Same server in multiple pools in Config")
 	}
-    */
+	if err := validateConfig(cls); err != nil {
+		log.Fatal(err)
+	}
+	cls.M.Unlock()
 	return true
+}
+
+func validateConfig(cls *config.Cluster) error {
+	portMap := make(map[int16]bool)
+	for _, cfg := range cls.ConfigMap {
+		if _, ok := portMap[cfg.Port]; ok {
+			return errors.New("Duplcate Port Number in Config")
+		}
+		portMap[cfg.Port] = true
+		if cfg.Replica < 0 || cfg.Capacity <= 0 || len(cfg.Servers) == 0 {
+			return errors.New("Error in either replica, capacity or servers in Config")
+		}
+	}
+	return nil
 }
 
 //return the client type
@@ -89,43 +98,43 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 			agent, _ := args[2].(string)
 			ip, _ := args[3].(string)
 			if agent == CLIENT_MOXI {
-                data := ClusterVbucketMap{}
-                for _,cp := range cls.ContextMap {
-			        cp.M.RLock()
-                    data.Buckets = append(data.Buckets, cp.V)
-			        cp.M.RUnlock()
-                }
-			    log.Println("agent is", agent)
+				data := ClusterVbucketMap{}
+				for _, cp := range cls.ContextMap {
+					cp.M.RLock()
+					data.Buckets = append(data.Buckets, cp.V)
+					cp.M.RUnlock()
+				}
+				log.Println("agent is", agent)
 				m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: data, HeartBeatTime: t}
 				return json.Marshal(m)
 			} else {
 				m := ConfigVbaMsg{Cmd: MSG_CONFIG_STR, HeartBeatTime: t}
-                cp := cls.GetContext(ip)
-                if cp == nil {
-                    break
-                }
+				cp := cls.GetContext(ip)
+				if cp == nil {
+					break
+				}
 				for _, entry := range cp.VbaInfo {
-                    if strings.Split(entry.Source, ":")[0] == ip {
-                        if index := getServerIndex(cp, ip); index != -1 {
-                            if len(cp.C.SecondaryIps) > index {
-                                if secondIp := cp.C.SecondaryIps[index];secondIp != "" {
-                                    entry.Source = cp.C.SecondaryIps[index]
-                                }
-                            }
-                         }
-                         dest := strings.Split(entry.Destination, ":")[0]
-                         if dest != "" {
-                             if index := getServerIndex(cp, dest); index != -1 {
-                                 if len(cp.C.SecondaryIps) > index {
-                                     if secondIp := cp.C.SecondaryIps[index];secondIp != "" {
-                                         entry.Destination = cp.C.SecondaryIps[index]
-                                     }
-                                 }
-                             }
-                         }
-                        m.Data = append(m.Data, entry)
-                    }
-                }
+					if strings.Split(entry.Source, ":")[0] == ip {
+						if index := getServerIndex(cp, ip); index != -1 {
+							if len(cp.C.SecondaryIps) > index {
+								if secondIp := cp.C.SecondaryIps[index]; secondIp != "" {
+									entry.Source = cp.C.SecondaryIps[index]
+								}
+							}
+						}
+						dest := strings.Split(entry.Destination, ":")[0]
+						if dest != "" {
+							if index := getServerIndex(cp, dest); index != -1 {
+								if len(cp.C.SecondaryIps) > index {
+									if secondIp := cp.C.SecondaryIps[index]; secondIp != "" {
+										entry.Destination = cp.C.SecondaryIps[index]
+									}
+								}
+							}
+						}
+						m.Data = append(m.Data, entry)
+					}
+				}
 				return json.Marshal(m)
 			}
 		}
@@ -140,14 +149,14 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
 	log.Println("sleep over for vbas")
-    cls.M.Lock()
-    for key,cfg := range cls.ConfigMap {
-	    checkVBAs(&cfg, co.Vba)
-        cp := &config.Context{}
-	    cp.GenMap(key, &cfg)
-        cls.ContextMap[key] = cp
-    }
-    cls.M.Unlock()
+	cls.M.Lock()
+	for key, cfg := range cls.ConfigMap {
+		checkVBAs(&cfg, co.Vba)
+		cp := &config.Context{}
+		cp.GenMap(key, &cfg)
+		cls.ContextMap[key] = cp
+	}
+	cls.M.Unlock()
 	co.Started = true
 	co.Cond.Broadcast()
 }
@@ -155,7 +164,6 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 func getServerIndex(cp *config.Context, sr string) int {
 	log.Println("input server is", sr, "all are", cp.C.Servers)
 	for s := range cp.C.Servers {
-		log.Println(strings.Split(cp.C.Servers[s], ":")[0])
 		if strings.Split(cp.C.Servers[s], ":")[0] == sr {
 			return s
 		}
@@ -192,20 +200,19 @@ func checkVBAs(c *config.Config, v ClientInfoMap) *config.Config {
 	v.Mu.RLock()
 	defer v.Mu.RUnlock()
 	connectedServs := []string{}
-	/*
-			for a := range c.Servers {
-		        //Need to uncomment this
-				if _, ok := v.Ma[c.Servers[a]]; ok {
-					connectedServs = append(connectedServs, c.Servers[a])
-			}
-				}*/
-	connectedServs = c.Servers
+    /*
+	for a := range c.Servers {
+		//Need to uncomment this
+		if _, ok := v.Ma[c.Servers[a]]; ok {
+			connectedServs = append(connectedServs, c.Servers[a])
+		}
+	}*/
+    connectedServs = c.Servers
 	log.Println("connect servers are", connectedServs)
 	capacity := len(connectedServs) * 100 / len(c.Servers)
-
 	if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-		//panic("Not enough server connected")
+		log.Fatal("Not enough server connected")
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets

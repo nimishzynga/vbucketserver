@@ -77,10 +77,10 @@ func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
 		os.Exit(1)
 	}
 	//parse the conf file
-    if ok := parseInitialConfig(confFile, cls); ok == false {
-        log.Println("Unable to parse the config")
-        return
-    }
+	if ok := parseInitialConfig(confFile, cls); ok == false {
+		log.Println("Unable to parse the config")
+		return
+	}
 	//wait for VBA's to connect
 	go waitForVBAs(cls, VBA_WAIT_TIME, c)
 	for {
@@ -128,13 +128,14 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 		if vc != nil {
 			RemoveConn(conn, co, vc.ClientType())
 		}
+        close(c)
 	}()
 
-	m := &RecvMsg{}
-	hasData := false
-	c1 := make(chan error)
-	c2 := make(chan []byte)
-	c3 := make(chan string, 10)
+    m := &RecvMsg{}
+    hasData := false
+    c1 := make(chan error)
+    c2 := make(chan []byte)
+    c3 := make(chan string, 10)
 
 	go func() {
 		d := make([]byte, RECV_BUF_LEN)

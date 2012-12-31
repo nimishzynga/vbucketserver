@@ -3,7 +3,7 @@ package config
 import (
 	"log"
 	"math/rand"
-    "strings"
+	"strings"
 )
 
 const (
@@ -63,37 +63,37 @@ func (cp *Context) generateVBAmap() {
 	vbaMap := make(map[string]VbaEntry)
 	var entry VbaEntry
 	var ok bool
-    for i := range m {
-        server := serverList[m[i][0]]
-        if cp.V.Smap.NumReplicas == 0 {
-            hashKey := server
-            if entry, ok = vbaMap[hashKey]; ok {
-                entry.VbId = append(entry.VbId, i)
-            } else {
-                entry = VbaEntry{
-                    Source:      server,
-                    VbId:        []int{i},
-                    Destination: "",
-                }
-            }
-            vbaMap[hashKey] = entry
-        } else {
-            for j := 1; j < len(m[i]); j++ {
-                hashKey := server
-                if entry, ok = vbaMap[hashKey]; ok {
-                    entry.VbId = append(entry.VbId, i)
-                } else {
-                    entry = VbaEntry{
-                        Source:      server,
-                        VbId:        []int{i},
-                        Destination: serverList[m[i][j]],
-                    }
-                }
-                vbaMap[hashKey] = entry
-            }
-        }
-    }
-    cp.VbaInfo = vbaMap
+	for i := range m {
+		server := serverList[m[i][0]]
+		if cp.V.Smap.NumReplicas == 0 {
+			hashKey := server
+			if entry, ok = vbaMap[hashKey]; ok {
+				entry.VbId = append(entry.VbId, i)
+			} else {
+				entry = VbaEntry{
+					Source:      server,
+					VbId:        []int{i},
+					Destination: "",
+				}
+			}
+			vbaMap[hashKey] = entry
+		} else {
+			for j := 1; j < len(m[i]); j++ {
+				hashKey := server
+				if entry, ok = vbaMap[hashKey]; ok {
+					entry.VbId = append(entry.VbId, i)
+				} else {
+					entry = VbaEntry{
+						Source:      server,
+						VbId:        []int{i},
+						Destination: serverList[m[i][j]],
+					}
+				}
+				vbaMap[hashKey] = entry
+			}
+		}
+	}
+	cp.VbaInfo = vbaMap
 }
 
 func (cp *Context) GenMap(cname string, cfg *Config) {
@@ -102,11 +102,11 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 		defer cp.M.Unlock()
 		cp.V.Smap.VBucketMap = *rv
 		cp.V.Smap.HashAlgorithm = cfg.Hash
-        cp.V.Port = cfg.Port
+		cp.V.Port = cfg.Port
 		cp.V.Smap.NumReplicas = int(cfg.Replica)
 		log.Println("serverlist is", cfg.Servers)
 		cp.V.Smap.ServerList = cfg.Servers
-        cp.V.Name = cname
+		cp.V.Name = cname
 		cp.C = *cfg //update the cfgfig
 		cp.generateVBAmap()
 		log.Println("capacity is", cfg.Capacity)
@@ -163,8 +163,8 @@ func (cp *Context) findFreeServer(s int, s2 int) int {
 		arr[j], arr[lastindex] = arr[lastindex], arr[j]
 		lastindex--
 	}
-	log.Println("freeserver", cp.S)
-	panic("No free server")
+    //Need to have a list of vbuckets for which server is not available
+	log.Fatal("freeserver not found for ", cp.S)
 	return -1
 }
 
@@ -207,12 +207,12 @@ func (cp *Context) HandleServerDown(ser string) (bool, map[string]VbaEntry) {
 }
 
 func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, map[string]VbaEntry) {
-    oldVbaMap := cp.VbaInfo
-    serverList := cp.V.Smap.ServerList
-    vbucketMa := cp.V.Smap.VBucketMap
-    changeVbaMap := make(map[string]VbaEntry)
+	oldVbaMap := cp.VbaInfo
+	serverList := cp.V.Smap.ServerList
+	vbucketMa := cp.V.Smap.VBucketMap
+	changeVbaMap := make(map[string]VbaEntry)
 
-    for i := 0; i < len(dvi.Active); i++ {
+	for i := 0; i < len(dvi.Active); i++ {
 		vbucket := vbucketMa[dvi.Active[i]]
 		key := serverList[ser]
 		oldEntry := oldVbaMap[key]
@@ -230,17 +230,17 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 			}
 		}
 		var j int
-        if vbucket[0] == ser {
-            log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
-            serverIndex := cp.findFreeServer(vbucket[0], ser)
-            log.Println("j is, new server is", j, serverIndex)
-            key := serverList[serverIndex]
-            oldEntry := oldVbaMap[key]
-            oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
-            changeVbaMap[key] = oldEntry
-            vbucketMa[dvi.Active[i]][0] = serverIndex
-            oldVbaMap[key] = oldEntry
-        }
+		if vbucket[0] == ser {
+			log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
+			serverIndex := cp.findFreeServer(vbucket[0], ser)
+			log.Println("j is, new server is", j, serverIndex)
+			key := serverList[serverIndex]
+			oldEntry := oldVbaMap[key]
+			oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
+			changeVbaMap[key] = oldEntry
+			vbucketMa[dvi.Active[i]][0] = serverIndex
+			oldVbaMap[key] = oldEntry
+		}
 	}
 	cp.VbaInfo = oldVbaMap
 	log.Println("new vbucket map was", vbucketMa)
@@ -261,12 +261,42 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 		return false, changeVbaMap
 	} else if serverDown {
 		cp.V.Smap.ServerList[ser] = DEAD_NODE_IP
-	}
-    log.Println("old vbucket map was", vbucketMa)
-	cp.reduceCapacity(ser, dvi.DisksFailed, int16(len(dvi.Active)+len(dvi.Replica)))
-    if cp.V.Smap.NumReplicas == 0 {
-        return cp.handleNoReplicaFailure(dvi, ser)
+	} else {
+        d := cp.getServerVbuckets(ser)
+        for i := range(dvi.Active) {
+            for j:= range(d.Active) {
+                if dvi.Active[i] != d.Active[j] {
+                    j++
+                    if j == len(d.Active) {
+                        log.Println("Invalid active vbuckets")
+                        return false,nil
+                    }
+                } else {
+                    break
+                }
+            }
+            i++
+        }
+        for i := range(dvi.Replica) {
+            for j:= range(d.Replica) {
+                if dvi.Replica[i] != d.Replica[j] {
+                    j++
+                    if j == len(d.Replica) {
+                        log.Println("Invalid replica vbuckets")
+                        return false,nil
+                    }
+                } else {
+                    break
+                }
+            }
+            i++
+        }
     }
+	log.Println("old vbucket map was", vbucketMa)
+	cp.reduceCapacity(ser, dvi.DisksFailed, int16(len(dvi.Active)+len(dvi.Replica)))
+	if cp.V.Smap.NumReplicas == 0 {
+		return cp.handleNoReplicaFailure(dvi, ser)
+	}
 	for i := 0; i < len(dvi.Active); i++ {
 		vbucket := vbucketMa[dvi.Active[i]]
 		for k := 1; k < len(vbucket); k++ {
@@ -363,6 +393,7 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 }
 
 func (cls *Cluster) GetContext(ip string) *Context {
+	ip = strings.Split(ip, ":")[0]
 	clusterName, ok := cls.IpMap[ip]
 	if ok == false {
 		log.Println("Ip not in cluster name list", ip, cls)
@@ -377,15 +408,14 @@ func (cls *Cluster) GetContext(ip string) *Context {
 }
 
 func (cls *Cluster) GenerateIpMap() bool {
-    for key,cfg := range cls.ConfigMap {
-        for i := range cfg.Servers {
-            server := cfg.Servers[i]
-            if _, ok := cls.IpMap[server]; ok {
-                return false
-            }
-            cls.IpMap[strings.Split(server, ":")[0]] = key
-        }
-    }
+	for key, cfg := range cls.ConfigMap {
+		for i := range cfg.Servers {
+			server := strings.Split(cfg.Servers[i], ":")[0]
+			if _, ok := cls.IpMap[server]; ok {
+				return false
+			}
+			cls.IpMap[server] = key
+		}
+	}
 	return true
 }
-
