@@ -114,6 +114,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					break
 				}
 				for _, entry := range cp.VbaInfo {
+                    log.Println("get msg vbamap is", cp.VbaInfo)
 					if strings.Split(entry.Source, ":")[0] == ip {
 						if index := getServerIndex(cp, ip); index != -1 {
 							if len(cp.C.SecondaryIps) > index {

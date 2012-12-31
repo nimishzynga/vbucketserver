@@ -94,6 +94,7 @@ func (cp *Context) generateVBAmap() {
 		}
 	}
 	cp.VbaInfo = vbaMap
+    log.Println("generateVBAmap : vba info is", cp.VbaInfo)
 }
 
 func (cp *Context) GenMap(cname string, cfg *Config) {
@@ -183,8 +184,6 @@ func (cp *Context) reduceCapacity(s int, n int, c int16) {
 }
 
 func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
-	cp.M.Lock()
-	defer cp.M.Unlock()
 	vbaMap := cp.V.Smap.VBucketMap
 	dvi := new(DeadVbucketInfo)
 	for i := 0; i < len(vbaMap); i++ {
@@ -202,7 +201,9 @@ func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 }
 
 func (cp *Context) HandleServerDown(ser string) (bool, map[string]VbaEntry) {
+	cp.M.Lock()
 	dvi := cp.getServerVbuckets(cp.getServerIndex(ser))
+	cp.M.Unlock()
 	return cp.HandleDeadVbuckets(*dvi, ser, true)
 }
 
@@ -362,6 +363,7 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 		}
 	}
 	cp.VbaInfo = oldVbaMap
+    cp.V.Smap.VBucketMap = vbucketMa
 	log.Println("new vbucket map was", vbucketMa)
 	return true, changeVbaMap
 }

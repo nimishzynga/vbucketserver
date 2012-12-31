@@ -27,10 +27,10 @@ func HandleUpLoadConfig(c *goweb.Context, cls *config.Cluster) {
 func HandleVbucketMap(c *goweb.Context, cls *config.Cluster) {
 	cls.M.RLock()
 	defer cls.M.RUnlock()
-	data := make(map[string]config.VBucketInfo)
-	for key, cp := range cls.ContextMap {
+	data := server.ClusterVbucketMap{}
+	for _, cp := range cls.ContextMap {
 		cp.M.RLock()
-		data[key] = cp.V
+        data.Buckets = append(data.Buckets, cp.V)
 		cp.M.RUnlock()
 	}
 	c.WriteResponse(data, 200)
