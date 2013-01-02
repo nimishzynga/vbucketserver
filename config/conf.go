@@ -114,7 +114,7 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 		cp.updateMaxCapacity(cfg.Capacity, len(cfg.Servers), cm)
 		log.Println("updated map ", cp.V)
 	} else {
-		log.Println("failed updated map ", err)
+		log.Fatal("failed to generate config map ")
 	}
 }
 
@@ -122,22 +122,23 @@ func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]int16
 	cc := int16(float32(2*cp.C.Vbuckets)*(1+(float32(capacity)/100))) / int16(totServers)
 	for i := 0; i < totServers; i++ {
 		c := ServerInfo{
-			maxVbuckets:     cc,
+			MaxVbuckets:     cc,
 			currentVbuckets: (*cm)[i],
 		}
 		log.Println("capacity is", cc, i)
 		cp.S = append(cp.S, c)
 	}
+   cp.Maxvbuckets = cc
 }
 
 //return the free server
 func (cp *Context) findFreeServer(s int, s2 int) int {
-	arr := make([]int, len(cp.C.Servers))
-	for i := 0; i < len(cp.C.Servers); i++ {
+	arr := make([]int, len(cp.V.Smap.ServerList))
+	for i := 0; i < len(cp.V.Smap.ServerList); i++ {
 		arr[i] = i
 	}
 	//remove the same server
-	lastindex := len(cp.C.Servers) - 1
+	lastindex := len(cp.V.Smap.ServerList) - 1
 	arr[s], arr[lastindex] = arr[lastindex], arr[s]
 	lastindex--
 	arr[s2], arr[lastindex] = arr[lastindex], arr[s2]
@@ -155,11 +156,11 @@ func (cp *Context) findFreeServer(s int, s2 int) int {
 		}
 		i := arr[j]
 		serInfo := cp.S[i]
-		if serInfo.currentVbuckets < serInfo.maxVbuckets {
+		if serInfo.currentVbuckets < serInfo.MaxVbuckets {
 			cp.S[i].currentVbuckets++
 			return i
 		} else {
-			log.Println("failed current and max ,index", serInfo.currentVbuckets, serInfo.maxVbuckets, i)
+			log.Println("failed current and max ,index", serInfo.currentVbuckets, serInfo.MaxVbuckets, i)
 		}
 		arr[j], arr[lastindex] = arr[lastindex], arr[j]
 		lastindex--
@@ -171,14 +172,14 @@ func (cp *Context) findFreeServer(s int, s2 int) int {
 
 func (cp *Context) reduceCapacity(s int, n int, c int16) {
 	if n == 0 {
-		cp.S[s].maxVbuckets = 0
+		cp.S[s].MaxVbuckets = 0
 		cp.S[s].currentVbuckets = 0
 	} else {
 		if cp.S[s].NumberOfDisk == 0 {
 			log.Println("Disk is Zero for", s)
 			return
 		}
-		cp.S[s].maxVbuckets -= (int16(n)*cp.S[s].maxVbuckets) / cp.S[s].NumberOfDisk
+		cp.S[s].MaxVbuckets -= (int16(n)*cp.S[s].MaxVbuckets) / cp.S[s].NumberOfDisk
 		cp.S[s].currentVbuckets -= c
 	}
 }
@@ -219,7 +220,7 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 		oldEntry := oldVbaMap[key]
 		//delete the replica vbucket from the vba map
 		for r := 0; r < len(oldEntry.VbId); r++ {
-			if oldEntry.VbId[r] == dvi.Replica[i] {
+			if oldEntry.VbId[r] == dvi.Active[i] {
 				oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
 				if len(oldEntry.VbId) == 0 {
 					delete(oldVbaMap, key)
@@ -269,7 +270,7 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
                 if dvi.Active[i] != d.Active[j] {
                     j++
                     if j == len(d.Active) {
-                        log.Println("Invalid active vbuckets")
+                        log.Println("Invalid active vbuckets", dvi.Active, d.Active)
                         return false,nil
                     }
                 } else {
@@ -324,7 +325,11 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 		vbucket = vbucketMa[dvi.Active[i]]
 		for k := 1; k < len(vbucket); k++ {
 			key := serverList[vbucket[0]] + serverList[vbucket[k]]
-			oldEntry := oldVbaMap[key]
+			oldEntry, ok := oldVbaMap[key]
+            if ok == false {
+                    oldEntry.Source = serverList[vbucket[0]]
+                    oldEntry.Destination = serverList[serverIndex]
+            }
 			oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
 			changeVbaMap[key] = oldEntry
 			oldVbaMap[key] = oldEntry
@@ -355,7 +360,11 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 				serverIndex := cp.findFreeServer(vbucket[0], ser)
 				log.Println("j is, new server is", j, serverIndex)
 				key := serverList[vbucket[0]] + serverList[serverIndex]
-				oldEntry := oldVbaMap[key]
+				oldEntry, ok := oldVbaMap[key]
+                if ok == false {
+                    oldEntry.Source = serverList[vbucket[0]]
+                    oldEntry.Destination = serverList[serverIndex]
+                }
 				oldEntry.VbId = append(oldEntry.VbId, dvi.Replica[i])
 				changeVbaMap[key] = oldEntry
 				vbucketMa[dvi.Replica[i]][j] = serverIndex
@@ -366,13 +375,17 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 	cp.VbaInfo = oldVbaMap
     cp.V.Smap.VBucketMap = vbucketMa
 	log.Println("new vbucket map was", vbucketMa)
+    log.Println("changed vba map is", changeVbaMap)
 	return true, changeVbaMap
 }
 
 func (cp *Context) HandleServerAlive(ser string) {
 	cp.M.Lock()
-	cp.C.Servers = append(cp.C.Servers, ser)
-	cp.M.Unlock()
+    cp.C.Servers = append(cp.C.Servers, ser)
+    cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, ser)
+    c := ServerInfo{}
+    cp.S = append(cp.S, c)
+    cp.M.Unlock()
 }
 
 func (cp *Context) getServerIndex(si string) int {
@@ -391,8 +404,17 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 	defer cp.M.Unlock()
 	i := cp.getServerIndex(ci.Server)
 	si := cp.S[i]
-	si.maxVbuckets += (si.maxVbuckets * ci.DiskAlive) / si.NumberOfDisk
+	si.MaxVbuckets += (si.MaxVbuckets * ci.DiskAlive) / si.NumberOfDisk
 	cp.S[i] = si
+}
+
+func (cls *Cluster) GetContextFromClusterName(clusterName string) *Context {
+	cp, ok := cls.ContextMap[clusterName]
+	if ok == false {
+		log.Println("cluster not in cluster name list", clusterName)
+		return nil
+	}
+	return cp
 }
 
 func (cls *Cluster) GetContext(ip string) *Context {

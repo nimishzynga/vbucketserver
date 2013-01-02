@@ -7,7 +7,7 @@ import (
 //per server info structure
 type ServerInfo struct {
 	currentVbuckets int16
-	maxVbuckets     int16
+	MaxVbuckets     int16
 	NumberOfDisk    int16
 }
 
@@ -68,6 +68,7 @@ type Context struct {
 	V       VBucketInfo  // vbucketMap to send to client
 	S       []ServerInfo // per server information
 	VbaInfo map[string]VbaEntry
+    Maxvbuckets int16
 	M       sync.RWMutex
 }
 

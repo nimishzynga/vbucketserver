@@ -126,6 +126,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 	}
 	si := cp.S[index]
 	si.NumberOfDisk = int16(capacity)
+    si.MaxVbuckets = cp.Maxvbuckets
 	cp.S[index] = si
 
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {

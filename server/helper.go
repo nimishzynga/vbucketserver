@@ -114,6 +114,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					break
 				}
 				for _, entry := range cp.VbaInfo {
+                    log.Println("entry is", entry)
 					if strings.Split(entry.Source, ":")[0] == ip {
 						if index := getServerIndex(cp, ip); index != -1 {
 							if len(cp.C.SecondaryIps) > index {
@@ -122,6 +123,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 								}
 							}
 						}
+                        log.Println("destination is", entry.Destination)
 						dest := strings.Split(entry.Destination, ":")[0]
 						if dest != "" {
 							if index := getServerIndex(cp, dest); index != -1 {
@@ -201,19 +203,20 @@ func checkVBAs(c *config.Config, v ClientInfoMap) *config.Config {
 	v.Mu.RLock()
 	defer v.Mu.RUnlock()
 	connectedServs := []string{}
-    /*
+    log.Println("Map is", v.Ma, c.Servers)
 	for a := range c.Servers {
+        ip := strings.Split(c.Servers[a], ":")[0]
 		//Need to uncomment this
-		if _, ok := v.Ma[c.Servers[a]]; ok {
+		if _, ok := v.Ma[ip]; ok {
 			connectedServs = append(connectedServs, c.Servers[a])
 		}
-	}*/
-    connectedServs = c.Servers
+	}
+    //connectedServs = c.Servers
 	log.Println("connect servers are", connectedServs)
-	capacity := len(connectedServs) * 100 / len(c.Servers)
+	capacity := (len(connectedServs) * 100) / len(c.Servers)
 	if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-		log.Fatal("Not enough server connected")
+		//log.Fatal("Not enough server connected, capacity is", capacity)
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets

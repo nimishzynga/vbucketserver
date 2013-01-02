@@ -5,6 +5,7 @@ import (
 	"log"
 	"vbucketserver/config"
 	"vbucketserver/server"
+    "strings"
 )
 
 func HandleUpLoadConfig(c *goweb.Context, cls *config.Cluster) {
@@ -85,17 +86,21 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 }
 
 func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
+    log.Println("Adding new server")
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			log.Println("got error", err)
 			return
 		}
-		cfgctx := cls.GetContext(si.Server)
+		cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
 		if cfgctx == nil {
 			log.Println("Context not found for", si.Server)
 			return
 		}
+        log.Println("got cluster name as", c.PathParams["cluster"])
+        server := strings.Split(si.Server, ":")[0]
+        cls.IpMap[server] = c.PathParams["cluster"]
 		cfgctx.HandleServerAlive(si.Server)
 	}
 }
@@ -117,27 +122,27 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 }
 
 func SetupHandlers(cls *config.Cluster, co *server.Client) {
-	goweb.MapFunc("/{version}/uploadConfig", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/uploadConfig", func(c *goweb.Context) {
 		HandleUpLoadConfig(c, cls)
 	})
 
-	goweb.MapFunc("/{version}/vbucketMap", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/vbucketMap", func(c *goweb.Context) {
 		HandleVbucketMap(c, cls)
 	})
 
-	goweb.MapFunc("/{version}/deadvBuckets", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/deadvBuckets", func(c *goweb.Context) {
 		HandleDeadvBuckets(c, cls, co)
 	})
 
-	goweb.MapFunc("/{version}/serverDown", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/serverDown", func(c *goweb.Context) {
 		HandleServerDown(c, cls, co)
 	})
 
-	goweb.MapFunc("/{version}/serverAlive", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/serverAlive", func(c *goweb.Context) {
 		HandleServerAlive(c, cls)
 	})
 
-	goweb.MapFunc("/{version}/capacityUpdate", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/capacityUpdate", func(c *goweb.Context) {
 		HandleCapacityUpdate(c, cls)
 	})
 }
