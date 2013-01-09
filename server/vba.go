@@ -17,6 +17,11 @@ func (gc *GenericClient) HandleOk(m *RecvMsg) bool {
 	if m.Status == MSG_OK_STR {
 		return true
 	}
+    if m.Status == MSG_ERROR_STR {
+        log.Println("VBA ERROR:", m.Detail)
+        /*dont disconnect VBA if error comes*/
+        return true
+    }
 	return false
 }
 
@@ -24,6 +29,11 @@ func (gc *GenericClient) HandleAlive(m *RecvMsg) bool {
 	if m.Cmd == MSG_ALIVE_STR {
 		return true
 	}
+    if m.Status == MSG_ERROR_STR {
+        log.Println("VBA ERROR:", m.Detail)
+        /*dont disconnect VBA if error comes*/
+        return true
+    }
 	return false
 }
 
@@ -114,22 +124,28 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 		co.Cond.Wait()
 	}
 	co.Cond.L.Unlock()
-	cp := cls.GetContext(getIpAddr(vc.conn))
+    ip := getIpAddr(vc.conn)
+	cp := cls.GetContext(ip)
 	if cp == nil {
-		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		log.Println("Not able to find context for", ip)
 		return false
 	}
-	index := getServerIndex(cp, getIpAddr(vc.conn))
+	index := getServerIndex(cp, ip)
 	if index == -1 {
-		log.Println("Server not in list", getIpAddr(vc.conn))
-		return false
+        if ip := getIpFromConfig(cp, ip);ip != "" {
+            cp.HandleServerAlive(ip, false)
+	        index = getServerIndex(cp, ip)
+        } else {
+            log.Println("Server not in list", ip)
+            return false
+        }
 	}
 	si := cp.S[index]
 	si.NumberOfDisk = int16(capacity)
     si.MaxVbuckets = cp.Maxvbuckets
 	cp.S[index] = si
 
-	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, ip); err == nil {
 		vc.ch <- m
 		return true
 	}

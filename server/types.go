@@ -39,6 +39,7 @@ type RecvMsg struct {
 	Agent    string
 	Status   string
 	Server   string
+    Detail   string
 	Vbuckets Vblist
 	Capacity int
 }

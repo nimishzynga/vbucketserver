@@ -35,6 +35,7 @@ const (
 	MSG_ALIVE_STR  = "ALIVE"
 	MSG_CONFIG_STR = "CONFIG"
 	MSG_FAIL_STR   = "FAIL"
+    MSG_ERROR_STR  = "ERROR"
 )
 
 //other constants
@@ -50,7 +51,7 @@ const (
 	CLIENT_MOXI    = "MOXI"
 	CLIENT_CLI     = "Cli"
 	CLIENT_UNKNOWN = "Unknown"
-	CLIENT_PCNT    = 1
+	CLIENT_PCNT    = 70
 )
 
 //return status
@@ -158,7 +159,6 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			return
 		case data = <-c2:
 			currTimeouts = 0
-			log.Println("got data")
 			fullData = append(fullData, data...)
 		case info := <-c3:
 			if info == CHN_NOTIFY_STR {
@@ -172,7 +172,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
 				return
 			}
-			log.Println("timeout on socket", conn)
+			log.Println("timeout on socket", getIpAddr(conn))
 			length = 0
 			fullData = fullData[:0]
 			continue
@@ -262,7 +262,6 @@ func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 			if vc.HandleOk(m) {
 				*s = STATE_ALIVE
 			}
-			log.Println("setting alive state")
 
 		case STATE_ALIVE:
 			if vc.HandleAlive(m) == false {

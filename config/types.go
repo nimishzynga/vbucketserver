@@ -6,8 +6,8 @@ import (
 
 //per server info structure
 type ServerInfo struct {
-	currentVbuckets int16
-	MaxVbuckets     int16
+	currentVbuckets uint32
+	MaxVbuckets     uint32
 	NumberOfDisk    int16
 }
 
@@ -20,7 +20,7 @@ type Cluster struct {
 
 type Config struct {
 	Port         int16
-	Vbuckets     int16
+	Vbuckets     uint16
 	Replica      int16
 	Hash         string
 	Capacity     int16
@@ -68,7 +68,7 @@ type Context struct {
 	V       VBucketInfo  // vbucketMap to send to client
 	S       []ServerInfo // per server information
 	VbaInfo map[string]VbaEntry
-    Maxvbuckets int16
+    Maxvbuckets uint32
 	M       sync.RWMutex
 }
 

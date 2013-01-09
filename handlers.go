@@ -101,7 +101,7 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
         log.Println("got cluster name as", c.PathParams["cluster"])
         server := strings.Split(si.Server, ":")[0]
         cls.IpMap[server] = c.PathParams["cluster"]
-		cfgctx.HandleServerAlive(si.Server)
+		cfgctx.HandleServerAlive(si.Server, true)
 	}
 }
 

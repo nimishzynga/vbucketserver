@@ -10,9 +10,9 @@ const (
 	DEAD_NODE_IP = "0.0.0.0:11211"
 )
 
-func (c Config) generatevBucketMap() (*[][]int, *[]int16, bool) {
+func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
 	serv := len(c.Servers)
-	capacityMap := make([]int16, len(c.Servers))
+	capacityMap := make([]uint32, len(c.Servers))
 	maxActive := int(c.Vbuckets) / serv
 	if int(c.Vbuckets)%serv > 0 {
 		maxActive += 1
@@ -59,7 +59,7 @@ func (c Config) generatevBucketMap() (*[][]int, *[]int16, bool) {
 
 func (cp *Context) generateVBAmap() {
 	m := cp.V.Smap.VBucketMap
-	serverList := cp.C.Servers
+	serverList := cp.V.Smap.ServerList
 	vbaMap := make(map[string]VbaEntry)
 	var entry VbaEntry
 	var ok bool
@@ -118,14 +118,15 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 	}
 }
 
-func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]int16) {
-	cc := int16(float32(2*cp.C.Vbuckets)*(1+(float32(capacity)/100))) / int16(totServers)
+func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]uint32) {
+	var cc uint32 = uint32(float32(uint32(cp.C.Replica)*uint32(cp.C.Vbuckets))*
+        (1+(float32(capacity)/100))) / uint32(totServers)
 	for i := 0; i < totServers; i++ {
 		c := ServerInfo{
 			MaxVbuckets:     cc,
 			currentVbuckets: (*cm)[i],
 		}
-		log.Println("capacity is", cc, i)
+        log.Println("Capacity , server :", cc, i)
 		cp.S = append(cp.S, c)
 	}
    cp.Maxvbuckets = cc
@@ -170,7 +171,7 @@ func (cp *Context) findFreeServer(s int, s2 int) int {
 	return -1
 }
 
-func (cp *Context) reduceCapacity(s int, n int, c int16) {
+func (cp *Context) reduceCapacity(s int, n int, c uint32) {
 	if n == 0 {
 		cp.S[s].MaxVbuckets = 0
 		cp.S[s].currentVbuckets = 0
@@ -179,7 +180,7 @@ func (cp *Context) reduceCapacity(s int, n int, c int16) {
 			log.Println("Disk is Zero for", s)
 			return
 		}
-		cp.S[s].MaxVbuckets -= (int16(n)*cp.S[s].MaxVbuckets) / cp.S[s].NumberOfDisk
+		cp.S[s].MaxVbuckets -= (uint32(n)*cp.S[s].MaxVbuckets) / uint32(cp.S[s].NumberOfDisk)
 		cp.S[s].currentVbuckets -= c
 	}
 }
@@ -261,9 +262,7 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 	if ser == -1 {
 		log.Println("Server not in list", s)
 		return false, changeVbaMap
-	} else if serverDown {
-		cp.V.Smap.ServerList[ser] = DEAD_NODE_IP
-	} else {
+	} else if serverDown == false {
         d := cp.getServerVbuckets(ser)
         for i := range(dvi.Active) {
             for j:= range(d.Active) {
@@ -296,7 +295,7 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
     }
     log.Println("Failed vbuckets :", dvi)
 	log.Println("old vbucket map was", vbucketMa)
-	cp.reduceCapacity(ser, dvi.DisksFailed, int16(len(dvi.Active)+len(dvi.Replica)))
+	cp.reduceCapacity(ser, dvi.DisksFailed, uint32(len(dvi.Active)+len(dvi.Replica)))
 	if cp.V.Smap.NumReplicas == 0 {
 		return cp.handleNoReplicaFailure(dvi, ser)
 	}
@@ -372,16 +371,24 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 			}
 		}
 	}
+
+	if serverDown {
+		cp.V.Smap.ServerList[ser] = DEAD_NODE_IP
+    }
 	cp.VbaInfo = oldVbaMap
+	log.Println("new cp.V.Smap.VBucketMap", cp.V.Smap.VBucketMap)
     cp.V.Smap.VBucketMap = vbucketMa
 	log.Println("new vbucket map was", vbucketMa)
     log.Println("changed vba map is", changeVbaMap)
+    log.Println("Final vbaMap is", oldVbaMap)
 	return true, changeVbaMap
 }
 
-func (cp *Context) HandleServerAlive(ser string) {
+func (cp *Context) HandleServerAlive(ser string, toAdd bool) {
 	cp.M.Lock()
-    cp.C.Servers = append(cp.C.Servers, ser)
+    if toAdd {
+        cp.C.Servers = append(cp.C.Servers, ser)
+    }
     cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, ser)
     c := ServerInfo{}
     cp.S = append(cp.S, c)
@@ -404,7 +411,7 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 	defer cp.M.Unlock()
 	i := cp.getServerIndex(ci.Server)
 	si := cp.S[i]
-	si.MaxVbuckets += (si.MaxVbuckets * ci.DiskAlive) / si.NumberOfDisk
+	si.MaxVbuckets += (si.MaxVbuckets * uint32(ci.DiskAlive)) / uint32(si.NumberOfDisk)
 	cp.S[i] = si
 }
 
