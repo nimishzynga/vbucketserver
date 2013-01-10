@@ -145,6 +145,10 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
     si.MaxVbuckets = cp.Maxvbuckets
 	cp.S[index] = si
 
+    if ok, mp := cp.NeedRebalance(index); ok {
+        PushNewConfig(co, mp)
+        return true
+    }
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, ip); err == nil {
 		vc.ch <- m
 		return true

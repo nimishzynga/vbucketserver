@@ -119,7 +119,7 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 }
 
 func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]uint32) {
-	var cc uint32 = uint32(float32(uint32(cp.C.Replica)*uint32(cp.C.Vbuckets))*
+	var cc uint32 = uint32(float32(uint32(cp.C.Replica+1)*uint32(cp.C.Vbuckets))*
         (1+(float32(capacity)/100))) / uint32(totServers)
 	for i := 0; i < totServers; i++ {
 		c := ServerInfo{
@@ -167,7 +167,8 @@ func (cp *Context) findFreeServer(s int, s2 int) int {
 		lastindex--
 	}
     //Need to have a list of vbuckets for which server is not available
-	log.Fatal("freeserver not found for ", cp.S)
+	log.Println("freeserver not found for ", cp.S)
+    cp.Rebalance = true
 	return -1
 }
 
@@ -236,13 +237,18 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 		if vbucket[0] == ser {
 			log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
 			serverIndex := cp.findFreeServer(vbucket[0], ser)
-			log.Println("j is, new server is", j, serverIndex)
-			key := serverList[serverIndex]
-			oldEntry := oldVbaMap[key]
-			oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
-			changeVbaMap[key] = oldEntry
-			vbucketMa[dvi.Active[i]][0] = serverIndex
-			oldVbaMap[key] = oldEntry
+            if serverIndex != -1 {
+                log.Println("j is, new server is", j, serverIndex)
+                key := serverList[serverIndex]
+                oldEntry := oldVbaMap[key]
+                oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
+                changeVbaMap[key] = oldEntry
+			    oldVbaMap[key] = oldEntry
+			    vbucketMa[dvi.Active[i]][0] = serverIndex
+            } else {
+                log.Println("CRITICAL:Not enough capacity for active vbuckets")
+                break
+            }
 		}
 	}
 	cp.VbaInfo = oldVbaMap
@@ -296,92 +302,167 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
     log.Println("Failed vbuckets :", dvi)
 	log.Println("old vbucket map was", vbucketMa)
 	cp.reduceCapacity(ser, dvi.DisksFailed, uint32(len(dvi.Active)+len(dvi.Replica)))
-	if cp.V.Smap.NumReplicas == 0 {
-		return cp.handleNoReplicaFailure(dvi, ser)
-	}
-	for i := 0; i < len(dvi.Active); i++ {
-		vbucket := vbucketMa[dvi.Active[i]]
-		for k := 1; k < len(vbucket); k++ {
-			key := serverList[vbucket[0]] + serverList[vbucket[k]]
-			oldEntry := oldVbaMap[key]
-			for r := 0; r < len(oldEntry.VbId); r++ {
-				if oldEntry.VbId[r] == dvi.Active[i] {
-					oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-					break
-				}
-			}
-			if len(oldEntry.VbId) == 0 {
-				delete(oldVbaMap, key)
-			} else {
-				changeVbaMap[key] = oldEntry
-				oldVbaMap[key] = oldEntry
-			}
-		}
-		vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][1]
-		serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], ser)
-		vbucketMa[dvi.Active[i]][1] = serverIndex
 
-		vbucket = vbucketMa[dvi.Active[i]]
-		for k := 1; k < len(vbucket); k++ {
-			key := serverList[vbucket[0]] + serverList[vbucket[k]]
-			oldEntry, ok := oldVbaMap[key]
-            if ok == false {
-                    oldEntry.Source = serverList[vbucket[0]]
-                    oldEntry.Destination = serverList[serverIndex]
+    if cp.V.Smap.NumReplicas == 0 {
+        _,changeVbaMap = cp.handleNoReplicaFailure(dvi, ser)
+    } else {
+        for i := 0; i < len(dvi.Active); i++ {
+            vbucket := vbucketMa[dvi.Active[i]]
+            for k := 1; k < len(vbucket); k++ {
+                key := serverList[vbucket[0]] + serverList[vbucket[k]]
+                oldEntry := oldVbaMap[key]
+                for r := 0; r < len(oldEntry.VbId); r++ {
+                    if oldEntry.VbId[r] == dvi.Active[i] {
+                        oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+                        break
+                    }
+                }
+                if len(oldEntry.VbId) == 0 {
+                    delete(oldVbaMap, key)
+                } else {
+                    changeVbaMap[key] = oldEntry
+                    oldVbaMap[key] = oldEntry
+                }
             }
-			oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
-			changeVbaMap[key] = oldEntry
-			oldVbaMap[key] = oldEntry
-		}
-	}
-
-	for i := 0; i < len(dvi.Replica); i++ {
-		vbucket := vbucketMa[dvi.Replica[i]]
-		key := serverList[vbucket[0]] + serverList[ser]
-		oldEntry := oldVbaMap[key]
-		//delete the replica vbucket from the vba map
-		for r := 0; r < len(oldEntry.VbId); r++ {
-			if oldEntry.VbId[r] == dvi.Replica[i] {
-				oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-				if len(oldEntry.VbId) == 0 {
-					delete(oldVbaMap, key)
-				} else {
-					changeVbaMap[key] = oldEntry
-					oldVbaMap[key] = oldEntry
-				}
-				break
-			}
-		}
-		var j int
-		for j = 0; j < len(vbucket); j++ {
-			if vbucket[j] == ser {
-				log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
-				serverIndex := cp.findFreeServer(vbucket[0], ser)
-				log.Println("j is, new server is", j, serverIndex)
-				key := serverList[vbucket[0]] + serverList[serverIndex]
-				oldEntry, ok := oldVbaMap[key]
+            k := 1
+            for ;k<len(vbucket);k++ {
+                if vbucketMa[dvi.Active[i]][k] != -1 {
+                    break
+                }
+            }
+            if k == len(vbucket) {
+                log.Println("CRITICAL:Not enough capacity for active vbuckets")
+                return true,changeVbaMap
+            }
+            vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][k]
+            serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], ser)
+            vbucketMa[dvi.Active[i]][k] = serverIndex
+            vbucket = vbucketMa[dvi.Active[i]]
+            for k:=1; k < len(vbucket); k++ {
+                if vbucket[k] == -1 {
+                    continue
+                }
+                key := serverList[vbucket[0]] + serverList[vbucket[k]]
+                oldEntry, ok := oldVbaMap[key]
                 if ok == false {
                     oldEntry.Source = serverList[vbucket[0]]
                     oldEntry.Destination = serverList[serverIndex]
                 }
-				oldEntry.VbId = append(oldEntry.VbId, dvi.Replica[i])
-				changeVbaMap[key] = oldEntry
-				vbucketMa[dvi.Replica[i]][j] = serverIndex
-				oldVbaMap[key] = oldEntry
-			}
-		}
-	}
+                oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
+                changeVbaMap[key] = oldEntry
+                oldVbaMap[key] = oldEntry
+            }
+        }
+
+        for i := 0; i < len(dvi.Replica); i++ {
+            vbucket := vbucketMa[dvi.Replica[i]]
+            key := serverList[vbucket[0]] + serverList[ser]
+            oldEntry := oldVbaMap[key]
+            //delete the replica vbucket from the vba map
+            for r := 0; r < len(oldEntry.VbId); r++ {
+                if oldEntry.VbId[r] == dvi.Replica[i] {
+                    oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+                    if len(oldEntry.VbId) == 0 {
+                        delete(oldVbaMap, key)
+                    } else {
+                        changeVbaMap[key] = oldEntry
+                        oldVbaMap[key] = oldEntry
+                    }
+                    break
+                }
+            }
+            var j int
+            for j = 0; j < len(vbucket); j++ {
+                if vbucket[j] == ser {
+                    log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
+                    serverIndex := cp.findFreeServer(vbucket[0], ser)
+                    vbucketMa[dvi.Replica[i]][j] = serverIndex
+                    if serverIndex == -1 {
+                        continue
+                    }
+                    log.Println("j is, new server is", j, serverIndex)
+                    key := serverList[vbucket[0]] + serverList[serverIndex]
+                    oldEntry, ok := oldVbaMap[key]
+                    if ok == false {
+                        oldEntry.Source = serverList[vbucket[0]]
+                        oldEntry.Destination = serverList[serverIndex]
+                    }
+                    oldEntry.VbId = append(oldEntry.VbId, dvi.Replica[i])
+                    changeVbaMap[key] = oldEntry
+                    oldVbaMap[key] = oldEntry
+                }
+            }
+        }
+    }
 
 	if serverDown {
+        for i := range cp.C.Servers {
+            if cp.C.Servers[i] == cp.V.Smap.ServerList[ser] {
+                cp.C.Servers[i] = DEAD_NODE_IP
+                break
+            }
+        }
 		cp.V.Smap.ServerList[ser] = DEAD_NODE_IP
     }
-	cp.VbaInfo = oldVbaMap
-	log.Println("new cp.V.Smap.VBucketMap", cp.V.Smap.VBucketMap)
-    cp.V.Smap.VBucketMap = vbucketMa
 	log.Println("new vbucket map was", vbucketMa)
     log.Println("changed vba map is", changeVbaMap)
     log.Println("Final vbaMap is", oldVbaMap)
 	return true, changeVbaMap
+}
+
+func (cp *Context) NeedRebalance(index int) (bool, map[string]VbaEntry) {
+    cp.M.Lock()
+    defer cp.M.Unlock()
+    si := cp.S[index]
+    if cp.Rebalance == false || si.currentVbuckets >= si.MaxVbuckets {
+        return false, nil
+    }
+    rebalancePending := false
+    entries := false
+    changeVbaMap := make(map[string]VbaEntry)
+    oldVbaMap := cp.VbaInfo
+	vbucketMap := cp.V.Smap.VBucketMap
+    found := -1
+    vbaMap := cp.V.Smap.VBucketMap
+	serverList := cp.V.Smap.ServerList
+
+    for i := 0; i < len(vbaMap); i++ {
+        indexFound := false
+        for j := 0; j < len(vbaMap[i]); j++ {
+            if vbaMap[i][j] == index {
+                if found != -1 {
+                    rebalancePending = true
+                    break
+                }
+                found = -1
+                indexFound = true
+            }
+            if vbaMap[i][j] == -1 {
+                if indexFound {
+                    rebalancePending = true
+                    break
+                } else {
+                    found = j
+                }
+            }
+        }
+        if found != -1 {
+            entries = true
+            vbaMap[i][found] = index
+            vbucket := vbucketMap[i]
+            key := serverList[vbucket[0]] + serverList[index]
+            oldEntry, ok := oldVbaMap[key]
+            if ok == false {
+                oldEntry.Source = serverList[vbucket[0]]
+                oldEntry.Destination = serverList[index]
+            }
+            oldEntry.VbId = append(oldEntry.VbId, i)
+            changeVbaMap[key] = oldEntry
+            oldVbaMap[key] = oldEntry
+        }
+    }
+    cp.Rebalance = rebalancePending
+    return entries, changeVbaMap
 }
 
 func (cp *Context) HandleServerAlive(ser string, toAdd bool) {

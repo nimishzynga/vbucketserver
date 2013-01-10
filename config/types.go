@@ -69,6 +69,7 @@ type Context struct {
 	S       []ServerInfo // per server information
 	VbaInfo map[string]VbaEntry
     Maxvbuckets uint32
+    Rebalance   bool
 	M       sync.RWMutex
 }
 
