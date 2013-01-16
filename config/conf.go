@@ -94,7 +94,7 @@ func (cp *Context) generateVBAmap() {
 		}
 	}
 	cp.VbaInfo = vbaMap
-    log.Println("generateVBAmap : vba info is", cp.VbaInfo)
+    //log.Println("generateVBAmap : vba info is", cp.VbaInfo)
 }
 
 func (cp *Context) GenMap(cname string, cfg *Config) {
@@ -112,7 +112,7 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 		cp.generateVBAmap()
 		log.Println("capacity is", cfg.Capacity)
 		cp.updateMaxCapacity(cfg.Capacity, len(cfg.Servers), cm)
-		log.Println("updated map ", cp.V)
+		//log.Println("updated map ", cp.V)
 	} else {
 		log.Fatal("failed to generate config map ")
 	}
@@ -413,6 +413,9 @@ func (cp *Context) HandleDeadVbuckets(dvi DeadVbucketInfo, s string, serverDown 
 func (cp *Context) NeedRebalance(index int) (bool, map[string]VbaEntry) {
     cp.M.Lock()
     defer cp.M.Unlock()
+    if len(cp.S) <= index {
+        return false, nil
+    }
     si := cp.S[index]
     if cp.Rebalance == false || si.currentVbuckets >= si.MaxVbuckets {
         return false, nil
@@ -491,7 +494,15 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 	cp.M.Lock()
 	defer cp.M.Unlock()
 	i := cp.getServerIndex(ci.Server)
+    if i == -1 {
+        log.Println("Server not found for capaciy update", ci.Server)
+        return
+    }
 	si := cp.S[i]
+    if si.NumberOfDisk == 0 {
+        log.Println("Capacity is zero for", ci.Server)
+        return
+    }
 	si.MaxVbuckets += (si.MaxVbuckets * uint32(ci.DiskAlive)) / uint32(si.NumberOfDisk)
 	cp.S[i] = si
 }
