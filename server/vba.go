@@ -13,22 +13,23 @@ func (gc *GenericClient) ClientType() string {
 	return CLIENT_UNKNOWN
 }
 
-func (gc *GenericClient) HandleOk(m *RecvMsg) bool {
+func (gc *GenericClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool {
 	if m.Status == MSG_OK_STR {
 		return true
 	}
-    if m.Status == MSG_ERROR_STR {
-        log.Println("VBA ERROR:", m.Detail)
-        /*dont disconnect VBA if error comes*/
-        return true
-    }
 	return false
 }
 
-func (gc *GenericClient) HandleAlive(m *RecvMsg) bool {
+func (gc *GenericClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bool {
 	if m.Cmd == MSG_ALIVE_STR {
 		return true
 	}
+    if m.Cmd == MSG_TRANSFER_STR {
+        changeMap := cls.HandleTransferDone(m.Server, m.Destination, m.Vbuckets)
+        //push config only to VBA
+        go PushNewConfig(co, changeMap, false)
+        return true
+    }
     if m.Status == MSG_ERROR_STR {
         log.Println("VBA ERROR:", m.Detail)
         /*dont disconnect VBA if error comes*/
@@ -66,22 +67,6 @@ type MoxiClient struct {
 
 func (mc *MoxiClient) ClientType() string {
 	return CLIENT_MOXI
-}
-
-//it should be for mcs client
-func (mc *MoxiClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
-	log.Println("inside handleFail")
-	cp := cls.GetContext(getIpAddr(mc.conn))
-	if cp == nil {
-		log.Println("Not able to find context for", getIpAddr(mc.conn))
-		return false
-	}
-	ok, mp := cp.HandleServerDown(m.Server)
-	if ok {
-		//need to call it on client info
-		go PushNewConfig(co, mp)
-	}
-	return true
 }
 
 func (mc *MoxiClient) HandleInit(ch chan string, cls *config.Cluster, co *Client, c int) bool {
@@ -133,7 +118,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 	index := getServerIndex(cp, ip)
 	if index == -1 {
         if ip := getIpFromConfig(cp, ip);ip != "" {
-            cp.HandleServerAlive(ip, false)
+            cp.HandleServerAlive([]string{ip}, false)
 	        index = getServerIndex(cp, ip)
         } else {
             log.Println("Server not in list", ip)
@@ -146,7 +131,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 	cp.S[index] = si
 
     if ok, mp := cp.NeedRebalance(index); ok {
-        PushNewConfig(co, mp)
+        PushNewConfig(co, mp, true)
         return true
     }
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, ip); err == nil {
@@ -162,4 +147,38 @@ func (vc *VbaClient) HandleUpdateConfig(cls *config.Cluster) bool {
 		return true
 	}
 	return false
+}
+
+func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool {
+	if m.Status == MSG_OK_STR {
+        cp := cls.GetContext(getIpAddr(vc.conn))
+	    if cp == nil {
+		    log.Println("Not able to find context for", getIpAddr(vc.conn))
+		    return false
+	    }
+        ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
+        go PushNewConfigToVBA(co, ip)
+		return true
+	}
+    if m.Status == MSG_ERROR_STR {
+        log.Println("VBA ERROR:", m.Detail)
+        /*dont disconnect VBA if error comes*/
+        return true
+    }
+	return false
+}
+
+func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
+	log.Println("inside handleFail")
+	cp := cls.GetContext(getIpAddr(vc.conn))
+	if cp == nil {
+		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		return false
+	}
+	ok, mp := cp.HandleServerDown(m.Server)
+	if ok {
+		//need to call it on client info
+		go PushNewConfig(co, mp, true)
+	}
+	return true
 }

@@ -50,9 +50,11 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 			log.Println("Context not found for", dvi.Server)
 			return
 		}
-		ok, mp := cp.HandleDeadVbuckets(dvi, dvi.Server, false)
+        args := []config.DeadVbucketInfo{dvi}
+        str := []string{dvi.Server}
+		ok, mp := cp.HandleDeadVbuckets(args, str, false, false)
 		if ok {
-			server.PushNewConfig(co, mp)
+			server.PushNewConfig(co, mp, true)
 		}
 	}
 }
@@ -68,19 +70,21 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 			return
 		}
 		log.Println("si is", si)
-		if si.Server == "" {
+		if len(si.Server) == 0 {
 			log.Println("server is null")
 			return
 		}
-		cfgctx := cls.GetContext(si.Server)
+        //TODO:Need to fix here
+		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
 			log.Println("Context not found for", si.Server)
 			return
 		}
 		log.Println("downserver is", si.Server)
-		ok, mp := cfgctx.HandleServerDown(si.Server)
+        //TODO:Need to fix here
+		ok, mp := cfgctx.HandleServerDown(si.Server[0])
 		if ok {
-			server.PushNewConfig(co, mp)
+			server.PushNewConfig(co, mp, true)
 		}
 	}
 }
@@ -99,9 +103,11 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
 			return
 		}
         log.Println("got cluster name as", c.PathParams["cluster"])
-        server := strings.Split(si.Server, ":")[0]
-        cls.IpMap[server] = c.PathParams["cluster"]
-		cfgctx.HandleServerAlive(si.Server, true)
+        for _,s := range si.Server {
+            server := strings.Split(s, ":")[0]
+            cls.IpMap[server] = c.PathParams["cluster"]
+        }
+        cfgctx.HandleServerAlive(si.Server, true)
 	}
 }
 

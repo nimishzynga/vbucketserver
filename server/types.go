@@ -28,11 +28,6 @@ type Client struct {
 	Moxi, Vba, Cli ClientInfoMap
 }
 
-type Vblist struct {
-	Master  []int
-	Replica []int
-}
-
 //parse the client message into it
 type RecvMsg struct {
 	Cmd      string
@@ -40,8 +35,10 @@ type RecvMsg struct {
 	Status   string
 	Server   string
     Detail   string
-	Vbuckets Vblist
+	Vbuckets config.Vblist
 	Capacity int
+    CheckPoints config.Vblist
+    Destination string
 }
 
 type InitMsg struct {
@@ -59,9 +56,10 @@ type ConfigMsg struct {
 }
 
 type ConfigVbaMsg struct {
-	Cmd           string
-	Data          []config.VbaEntry
-	HeartBeatTime int
+	Cmd                 string
+	Data                []config.VbaEntry
+    RestoreCheckPoints  []int
+	HeartBeatTime       int
 }
 
 func NewClientInfoMap() ClientInfoMap {

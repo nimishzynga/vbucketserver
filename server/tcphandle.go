@@ -36,6 +36,7 @@ const (
 	MSG_CONFIG_STR = "CONFIG"
 	MSG_FAIL_STR   = "FAIL"
     MSG_ERROR_STR  = "ERROR"
+    MSG_TRANSFER_STR = "TRANSFER_DONE"
 )
 
 //other constants
@@ -66,8 +67,8 @@ type VbsClient interface {
 	ClientType() string
 	HandleInit(chan string, *config.Cluster, *Client, int) bool
 	HandleFail(*RecvMsg, *config.Cluster, *Client) bool
-	HandleOk(*RecvMsg) bool
-	HandleAlive(*RecvMsg) bool
+	HandleOk(*config.Cluster, *Client, *RecvMsg) bool
+	HandleAlive(*config.Cluster, *Client, *RecvMsg) bool
 	HandleUpdateConfig(*config.Cluster) bool
 }
 
@@ -259,12 +260,12 @@ func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 			*s = STATE_CONFIG_RES
 
 		case STATE_CONFIG_RES:
-			if vc.HandleOk(m) {
+			if vc.HandleOk(cls, co, m) {
 				*s = STATE_ALIVE
 			}
 
 		case STATE_ALIVE:
-			if vc.HandleAlive(m) == false {
+			if vc.HandleAlive(cls, co, m) == false {
 				return STATUS_ERR
 			}
 

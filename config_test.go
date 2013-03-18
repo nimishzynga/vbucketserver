@@ -64,7 +64,7 @@ func getVbuckets(c *config.Context) ([][]int, [][]int){
 func getContext() *config.Config {
     Servers := []string{"1.1.1.1", "2.2.2.2", "3.3.3.3"}
     Sip := []string{}
-    c := &config.Config{11111, 64000, 1, "CRC", 70, Servers, Sip}
+    c := &config.Config{11111, 32, 1, "CRC", 70, Servers, Sip}
     return c
 }
 

@@ -9,6 +9,7 @@ type ServerInfo struct {
 	currentVbuckets uint32
 	MaxVbuckets     uint32
 	NumberOfDisk    int16
+    ReplicaVbuckets []int
 }
 
 type Cluster struct {
@@ -29,10 +30,11 @@ type Config struct {
 }
 
 type VbucketServerMap struct {
-	VBucketMap    [][]int  `json:"vBucketMap"`
-	HashAlgorithm string   `json:"hashAlgorithm"`
-	NumReplicas   int      `json:"numReplicas"`
-	ServerList    []string `json:"serverList"`
+	VBucketMap    [][]int       `json:"vBucketMap"`
+	VBucketMapForward[][]int    `json:"vBucketMapForward"`
+	HashAlgorithm string        `json:"hashAlgorithm"`
+	NumReplicas   int           `json:"numReplicas"`
+	ServerList    []string      `json:"serverList"`
 }
 
 type VBucketInfo struct {
@@ -46,21 +48,29 @@ type DeadVbucketInfo struct {
 	DisksFailed int
 	Active      []int
 	Replica     []int
+    Transfer    []int //vbucket needs to be transferred
 }
 
 type VbaEntry struct {
-	Source      string
-	VbId        []int
-	Destination string
+	Source          string
+	VbId            []int
+	Destination     string
+    CheckPoints     []int  //checkpoints corresponding to vbucket ids
+    Transfer_VbId   []int
 }
 
 type ServerUpDownInfo struct {
-	Server string
+	Server []string
 }
 
 type CapacityUpdateInfo struct {
 	Server    string
 	DiskAlive int16
+}
+
+type Vblist struct {
+	Master  []int
+	Replica []int
 }
 
 type Context struct {
