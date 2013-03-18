@@ -52,7 +52,7 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 		}
         args := []config.DeadVbucketInfo{dvi}
         str := []string{dvi.Server}
-		ok, mp := cp.HandleDeadVbuckets(args, str, false, false)
+		ok, mp := cp.HandleDeadVbuckets(args, str, false, nil)
 		if ok {
 			server.PushNewConfig(co, mp, true)
 		}
