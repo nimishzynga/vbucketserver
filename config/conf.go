@@ -11,10 +11,26 @@ const (
     REPLICA_RESTORE = -2
 )
 
+//return the secondary ip given any ip
+//return the same ip, if it is secondary
+func (cp *Context) getSecondaryIp(ip string) {
+}
+
+//return the primary ip
+//return the same ip, if it is primary
+func (cp *Context) getPrimaryIp(ip string) {
+}
+
+
+func (cp *Context) getIndex(s int, arr []VbucketCountBoth, isprimary bool) int {
+}
+
+
 func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
 	serv := len(c.Servers)
 	capacityMap := make([]uint32, len(c.Servers))
 	maxActive := int(c.Vbuckets) / serv
+    countVbuckets := make([]VbucketCountBoth, len(c.Servers))
 	if int(c.Vbuckets)%serv > 0 {
 		maxActive += 1
 	}
@@ -33,7 +49,7 @@ func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
 	//distribute the active vbuckets
 	for i := 0; i < int(c.Vbuckets); i++ {
 		s := i / maxActive
-		confMap[i][0] = s
+		confMap[i][0] = cp.getIndex(s, countVbuckets, true)
 		capacityMap[s]++
 		//distribute the replicas
 		for j := 1; j <= int(c.Replica); j++ {
@@ -47,7 +63,7 @@ func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
 					continue
 				} else {
 					c++
-					countReplica[lastserver] = c
+					countReplica[lastserver] = cp.getIndex(c, countVbuckets, false)
 				}
 				confMap[i][j] = lastserver
 				capacityMap[lastserver]++
@@ -98,7 +114,13 @@ func (cp *Context) generateVBAmap() {
     //log.Println("generateVBAmap : vba info is", cp.VbaInfo)
 }
 
+func (cp *Context) parseIps(cfg *Config) {
+//populate the map in cp and append cp.V.Smap.ServerList
+// with servers and secondary ips 
+}
+
 func (cp *Context) GenMap(cname string, cfg *Config) {
+    cp.parseIps(cfg)
 	if rv, cm, err := cfg.generatevBucketMap(); err == false {
 		cp.M.Lock()
 		defer cp.M.Unlock()
@@ -107,7 +129,7 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 		cp.V.Port = cfg.Port
 		cp.V.Smap.NumReplicas = int(cfg.Replica)
 		log.Println("serverlist is", cfg.Servers)
-		cp.V.Smap.ServerList = cfg.Servers
+		//cp.V.Smap.ServerList = cfg.Servers
 		cp.V.Name = cname
 		cp.C = *cfg //update the cfgfig
 		cp.generateVBAmap()

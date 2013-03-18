@@ -73,6 +73,17 @@ type Vblist struct {
 	Replica []int
 }
 
+type VbucketCount struct {
+    Master int
+    Replica int
+}
+
+type VbucketCountBoth struct {
+    primary VbucketCount
+    secondary VbucketCount
+}
+
+//Have a map for ips here.
 type Context struct {
 	C       Config       //input Config
 	V       VBucketInfo  // vbucketMap to send to client
