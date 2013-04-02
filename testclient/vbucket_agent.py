@@ -1,4 +1,4 @@
-#!/usr/bin/env python2.4
+#!/usr/bin/env python2.6
 """
 VBucket agent
 """
@@ -12,7 +12,7 @@ import signal
 import sys
 import threading 
 import Queue
-import simplejson as json
+import simplejson 
 import subprocess
 import zlib
 import re

@@ -85,13 +85,21 @@ type VbucketCountBoth struct {
 
 //Have a map for ips here.
 type Context struct {
-	C       Config       //input Config
-	V       VBucketInfo  // vbucketMap to send to client
-	S       []ServerInfo // per server information
-	VbaInfo map[string]VbaEntry
-    Maxvbuckets uint32
-    Rebalance   bool
+	C               Config       //input Config
+	V               VBucketInfo  // vbucketMap to send to client
+	S               []ServerInfo // per server information
+	VbaInfo         map[string]VbaEntry
+    SecondaryIpMap   map[int]int
+    Maxvbuckets     uint32
+    Rebalance       bool
 	M       sync.RWMutex
+}
+
+func NewContext() *Context {
+    ct := &Context{
+        SecondaryIpMap : make(map[int]int),
+    }
+    return ct
 }
 
 func NewCluster() *Cluster {

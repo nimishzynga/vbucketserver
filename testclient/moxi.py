@@ -12,7 +12,7 @@ import signal
 import sys
 import threading 
 import Queue
-import simplejson as json
+#import simplejson as json
 import subprocess
 import zlib
 import re

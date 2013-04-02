@@ -52,7 +52,7 @@ const (
 	CLIENT_MOXI    = "MOXI"
 	CLIENT_CLI     = "Cli"
 	CLIENT_UNKNOWN = "Unknown"
-	CLIENT_PCNT    = 70
+	CLIENT_PCNT    = 10
 )
 
 //return status

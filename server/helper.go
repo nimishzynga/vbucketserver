@@ -129,6 +129,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					if len(replicas.ReplicaVbuckets) > 0 {
 						m.RestoreCheckPoints = append(m.RestoreCheckPoints, replicas.ReplicaVbuckets...)
 						replicas.ReplicaVbuckets = replicas.ReplicaVbuckets[:0]
+                        cp.S[index] = replicas
 					}
 				}
 				return json.Marshal(m)
@@ -150,6 +151,7 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 		serverList := cfg.Servers
 		checkVBAs(&cfg, co.Vba)
 		cp := &config.Context{}
+        cp.SecondaryIpMap = make(map[int]int)
 		cp.GenMap(key, &cfg)
 		cp.C.Servers = serverList
 		cls.ContextMap[key] = cp
@@ -182,9 +184,9 @@ func getIpFromConfig(cp *config.Context, sr string) string {
 }
 
 //push the config to a VBA
-func PushNewConfigToVBA(co *Client, ipl []string) {
+func PushNewConfigToVBA(co *Client, ipl map[string]int) {
     co.Vba.Mu.Lock()
-    for _,ip := range ipl {
+    for ip := range ipl {
         ip = strings.Split(ip, ":")[0]
         if val, ok := co.Vba.Ma[ip]; ok {
             val.C <- CHN_NOTIFY_STR
@@ -235,7 +237,7 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
 	capacity := (len(connectedServs) * 100) / len(c.Servers)
 	if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-		log.Fatal("Not enough server connected, capacity is", capacity)
+        //log.Fatal("Not enough server connected, capacity is", capacity)
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets

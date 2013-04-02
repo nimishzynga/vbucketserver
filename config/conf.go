@@ -13,23 +13,81 @@ const (
 
 //return the secondary ip given any ip
 //return the same ip, if it is secondary
-func (cp *Context) getSecondaryIp(ip string) {
+func (cp *Context) getSecondaryIp(ip string) string {
+    index := cp.getServerIndex(ip)
+    if in := cp.getSecondaryIndex(index); in != -1 {
+        return cp.V.Smap.ServerList[in]
+    }
+    return ""
+}
+
+func (cp *Context) getSecondaryIndex(i int) int {
+    if index, ok := cp.SecondaryIpMap[i]; ok {
+        if index == -1 {
+            return i
+        }
+        if index < i {
+            return i
+        }
+        return index
+    }
+    return -1
 }
 
 //return the primary ip
 //return the same ip, if it is primary
-func (cp *Context) getPrimaryIp(ip string) {
+func (cp *Context) getPrimaryIp(ip string) string {
+    index := cp.getServerIndex(ip)
+    if in := cp.getPrimaryIndex(index); in != -1 {
+        return cp.V.Smap.ServerList[in]
+    }
+    return ""
+}
+
+func (cp *Context) getPrimaryIndex(i int) int {
+    if index, ok := cp.SecondaryIpMap[i]; ok {
+        if index == -1 {
+            return i
+        }
+        if index < i {
+            return index
+        }
+        return i
+    }
+    return -1
+}
+
+func (cp *Context) getIndex(s int, arr []VbucketCountBoth, isactive bool) int {
+    log.Println("index is", s)
+    pri := arr[s].primary
+    sec := arr[s].secondary
+    if isactive {
+        if pri.Master > sec.Master {
+            arr[s].secondary.Master++
+            return cp.getSecondaryIndex(s)
+        }
+        arr[s].primary.Master++
+        return cp.getPrimaryIndex(s)
+    } else {
+      if pri.Replica > sec.Replica {
+            arr[s].secondary.Replica++
+            return cp.getSecondaryIndex(s)
+        }
+        arr[s].primary.Replica++
+        return cp.getPrimaryIndex(s)
+    }
+    return 0
 }
 
 
-func (cp *Context) getIndex(s int, arr []VbucketCountBoth, isprimary bool) int {
-}
-
-
-func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
+//generate map using the actual number of servers.Not uses the dual interfaces
+//in account
+func (cp *Context) generatevBucketMap(c *Config) (*[][]int, *[]uint32, bool) {
 	serv := len(c.Servers)
+    log.Println("Number of servers are", serv)
 	capacityMap := make([]uint32, len(c.Servers))
 	maxActive := int(c.Vbuckets) / serv
+    log.Println("maxActive is", maxActive, c.Vbuckets)
     countVbuckets := make([]VbucketCountBoth, len(c.Servers))
 	if int(c.Vbuckets)%serv > 0 {
 		maxActive += 1
@@ -49,6 +107,7 @@ func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
 	//distribute the active vbuckets
 	for i := 0; i < int(c.Vbuckets); i++ {
 		s := i / maxActive
+        log.Println("s is",s)
 		confMap[i][0] = cp.getIndex(s, countVbuckets, true)
 		capacityMap[s]++
 		//distribute the replicas
@@ -63,19 +122,21 @@ func (c Config) generatevBucketMap() (*[][]int, *[]uint32, bool) {
 					continue
 				} else {
 					c++
-					countReplica[lastserver] = cp.getIndex(c, countVbuckets, false)
+					countReplica[lastserver] = c
 				}
-				confMap[i][j] = lastserver
+				confMap[i][j] = cp.getIndex(lastserver, countVbuckets, false)
 				capacityMap[lastserver]++
 				break
 			}
 		}
 	}
+    log.Println("conf map is", confMap)
 	return &confMap, &capacityMap, false
 }
 
 func (cp *Context) generateVBAmap() {
 	m := cp.V.Smap.VBucketMap
+    log.Println("map is", m)
 	serverList := cp.V.Smap.ServerList
 	vbaMap := make(map[string]VbaEntry)
 	var entry VbaEntry
@@ -115,13 +176,28 @@ func (cp *Context) generateVBAmap() {
 }
 
 func (cp *Context) parseIps(cfg *Config) {
-//populate the map in cp and append cp.V.Smap.ServerList
-// with servers and secondary ips 
+    //populate the map in cp and append cp.V.Smap.ServerList
+    // with servers and secondary ips 
+    cp.V.Smap.ServerList = cfg.Servers
+    count := 0
+    sec := 0
+    for i,_ := range cfg.Servers {
+        if len(cfg.SecondaryIps) > i && cfg.SecondaryIps[i] != "" {
+            cp.SecondaryIpMap[sec+len(cfg.Servers)] = count
+            cp.SecondaryIpMap[count] = sec + len(cfg.Servers)
+            cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, cfg.SecondaryIps[i])
+            sec++
+        } else {
+            cp.SecondaryIpMap[count] = -1
+        }
+        count++
+    }
 }
 
 func (cp *Context) GenMap(cname string, cfg *Config) {
     cp.parseIps(cfg)
-	if rv, cm, err := cfg.generatevBucketMap(); err == false {
+    log.Println("config is", cfg)
+	if rv, cm, err := cp.generatevBucketMap(cfg); err == false {
 		cp.M.Lock()
 		defer cp.M.Unlock()
 		cp.V.Smap.VBucketMap = *rv
@@ -156,6 +232,10 @@ func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]uint3
    cp.Maxvbuckets = cc
 }
 
+func (cp *Context) sameServer(index1 int, index2 int) bool {
+    return cp.getPrimaryIndex(index1) == cp.getPrimaryIndex(index2)
+}
+
 //return the free server
 func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
     var arr []int
@@ -168,9 +248,9 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
         arr = s3
     }
     s2 = append(s2, s)
-    for j := range s2 {
-        for k := range arr {
-            if arr[k] == j {
+    for _,j := range s2 {
+        for k := 0; k < len(arr); k++ {
+            if cp.sameServer(arr[k], j) {
                 arr = append(arr[:k], arr[k+1:]...)
             }
         }
@@ -187,7 +267,7 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
 			j = rand.Int31n(int32(lastindex))
 		}
 		i := arr[j]
-		serInfo := cp.S[i]
+		serInfo := cp.S[cp.getPrimaryIndex(i)]
 		if serInfo.currentVbuckets < serInfo.MaxVbuckets {
 			cp.S[i].currentVbuckets++
 			return i
@@ -219,10 +299,12 @@ func (cp *Context) reduceCapacity(s int, n int, c uint32) {
 
 func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	vbaMap := cp.V.Smap.VBucketMap
+    priIndex := cp.getPrimaryIndex(s)
+    secIndex := cp.getSecondaryIndex(s)
 	dvi := new(DeadVbucketInfo)
 	for i := 0; i < len(vbaMap); i++ {
 		for j := 0; j < len(vbaMap[i]); j++ {
-			if vbaMap[i][j] == s {
+			if vbaMap[i][j] == priIndex || vbaMap[i][j] == secIndex {
 				if j == 0 {
 					dvi.Active = append(dvi.Active, i)
 				} else {
@@ -597,7 +679,7 @@ func (cp *Context) HandleServerAlive(ser []string, toAdd bool) {
 func (cp *Context) getServerIndex(si string) int {
 	s := cp.V.Smap.ServerList
 	for i := range s {
-		if s[i] == si {
+        if strings.Split(s[i], ":")[0] == strings.Split(si, ":")[0] {
 			return i
 		}
 	}
@@ -643,26 +725,32 @@ func (cp *Context) getMasterServer(vb int) int {
     return vbucket[0]
 }
 
-func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) []string {
+func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map[string]int {
 	cp.M.Lock()
     serverList := cp.V.Smap.ServerList
-    serverToInfo := []string{}
+    serverToInfo := make(map[string]int)
+    log.Println("inside HandleRestoreCheckPoints for ip", ip, vb.Replica)
     for i,vb := range vb.Replica {
         src := cp.getServerIndex(ip)
         ms := cp.getMasterServer(vb)
-        key := serverList[src] + serverList[ms]
+        if src == -1 || ms == -1 {
+            log.Panic("src and ms", src, ms, ip, vb)
+        }
+        key := serverList[ms] + serverList[src]
         oldEntry,ok := cp.VbaInfo[key]
         if ok == false {
-            oldEntry.Source = serverList[src]
-            oldEntry.Destination = serverList[ms]
+            oldEntry.Source = serverList[ms]
+            oldEntry.Destination = serverList[src]
         }
         vbId := []int{vb}
         oldEntry.VbId = append(vbId, oldEntry.VbId...)
         ckp := []int{ck.Replica[i]}
         oldEntry.CheckPoints = append(ckp, oldEntry.CheckPoints...)
-        serverToInfo = append(serverToInfo, serverList[ms])
+        cp.VbaInfo[key] = oldEntry
+        serverToInfo[serverList[ms]] = 1
     }
 	cp.M.Unlock()
+    log.Println("returing the serverinfo", serverToInfo)
     return serverToInfo
 }
 

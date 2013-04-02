@@ -12,13 +12,13 @@ function ErrandExit {
 
 function startVBA {
 echo "starting vba" 
-sudo python2.4 /home/nigupta/vba/vbucket_agent.py -e 127.0.0.$1 > /dev/null 2>&1 &
+sudo python2.4 vbucket_agent.py -e 127.0.0.$1 > /dev/null 2>&1 &
 echo $!
 }
 
 function startMoxi {
 echo "starting moxi"
-sudo python2.4 /home/nigupta/vba/moxi.py -e 127.0.0.$1 > /dev/null 2>&1 &
+sudo python2.4 moxi.py -e 127.0.0.$1 > /dev/null 2>&1 &
 echo $!
 }
 

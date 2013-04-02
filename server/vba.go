@@ -152,10 +152,12 @@ func (vc *VbaClient) HandleUpdateConfig(cls *config.Cluster) bool {
 func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool {
 	if m.Status == MSG_OK_STR {
         cp := cls.GetContext(getIpAddr(vc.conn))
+        log.Println("before contxt got ok from", getIpAddr(vc.conn))
 	    if cp == nil {
 		    log.Println("Not able to find context for", getIpAddr(vc.conn))
 		    return false
 	    }
+        log.Println("got ok from", getIpAddr(vc.conn))
         ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
         go PushNewConfigToVBA(co, ip)
 		return true
