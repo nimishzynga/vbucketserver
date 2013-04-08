@@ -37,6 +37,7 @@ const (
 	MSG_FAIL_STR   = "FAIL"
     MSG_ERROR_STR  = "ERROR"
     MSG_TRANSFER_STR = "TRANSFER_DONE"
+    MSG_CKPOINT_STR = "CKPOINT"
 )
 
 //other constants
@@ -70,6 +71,7 @@ type VbsClient interface {
 	HandleOk(*config.Cluster, *Client, *RecvMsg) bool
 	HandleAlive(*config.Cluster, *Client, *RecvMsg) bool
 	HandleUpdateConfig(*config.Cluster) bool
+    HandleCheckPoint(*RecvMsg, *config.Cluster) bool
 }
 
 func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
@@ -248,35 +250,39 @@ func getClient(ct string, conn net.Conn, ch chan []byte) VbsClient {
 }
 
 func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
-	cls *config.Cluster, i chan string, vc VbsClient) int {
-	if m != nil && m.Cmd == MSG_FAIL_STR {
-		if vc != nil {
-			vc.HandleFail(m, cls, co)
-		}
-	} else {
-		switch *s {
-		case STATE_INIT_RES:
-			vc.HandleInit(i, cls, co, m.Capacity)
-			*s = STATE_CONFIG_RES
+cls *config.Cluster, i chan string, vc VbsClient) int {
+    if m != nil {
+        if vc != nil {
+            if m.Cmd == MSG_FAIL_STR {
+                vc.HandleFail(m, cls, co)
+            } else if m.Cmd == MSG_CKPOINT_STR {
+                vc.HandleCheckPoint(m, cls)
+            }
+        }
+    } else {
+        switch *s {
+        case STATE_INIT_RES:
+            vc.HandleInit(i, cls, co, m.Capacity)
+            *s = STATE_CONFIG_RES
 
-		case STATE_CONFIG_RES:
-			if vc.HandleOk(cls, co, m) {
-				*s = STATE_ALIVE
-			}
+        case STATE_CONFIG_RES:
+            if vc.HandleOk(cls, co, m) {
+                *s = STATE_ALIVE
+            }
 
-		case STATE_ALIVE:
-			if vc.HandleAlive(cls, co, m) == false {
-				return STATUS_ERR
-			}
+        case STATE_ALIVE:
+            if vc.HandleAlive(cls, co, m) == false {
+                return STATUS_ERR
+            }
 
-		case STATE_UPDATE_CONFIG:
-			if vc.HandleUpdateConfig(cls) == false {
-				return STATUS_ERR
-			}
-			*s = STATE_CONFIG_RES
-		}
-	}
-	return STATUS_SUCCESS
+        case STATE_UPDATE_CONFIG:
+            if vc.HandleUpdateConfig(cls) == false {
+                return STATUS_ERR
+            }
+            *s = STATE_CONFIG_RES
+        }
+    }
+    return STATUS_SUCCESS
 }
 
 func SendInitMsg(ch chan []byte) {

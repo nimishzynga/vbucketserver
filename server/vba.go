@@ -39,24 +39,20 @@ func (gc *GenericClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg
 }
 
 func (gc *GenericClient) HandleInit(ch chan string, cp *config.Cluster, co *Client, c int) bool {
-	_ = ch
-	_ = cp
-	_ = co
-	_ = c
 	return false
 }
 
 func (gc *GenericClient) HandleFail(m *RecvMsg, cp *config.Cluster, co *Client) bool {
-	_ = cp
-	_ = m
-	_ = co
 	log.Println("invalid client")
 	return false
 }
 
 func (gc *GenericClient) HandleUpdateConfig(cp *config.Cluster) bool {
-	_ = gc
 	return false
+}
+
+func (gc *GenericClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
+    return false
 }
 
 type MoxiClient struct {
@@ -118,7 +114,8 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 	index := getServerIndex(cp, ip)
 	if index == -1 {
         if ip := getIpFromConfig(cp, ip);ip != "" {
-            cp.HandleServerAlive([]string{ip}, false)
+            //TODO:need to fix the secondary ip in the call
+            cp.HandleServerAlive([]string{ip}, nil, false)
 	        index = getServerIndex(cp, ip)
         } else {
             log.Println("Server not in list", ip)
@@ -177,10 +174,21 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 		log.Println("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
-	ok, mp := cp.HandleServerDown(m.Server)
+	ok, mp := cp.HandleServerDown([]string{m.Server})
 	if ok {
 		//need to call it on client info
 		go PushNewConfig(co, mp, true)
 	}
 	return true
+}
+
+func (vc *VbaClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
+	log.Println("inside handleCheckPoint")
+	cp := cls.GetContext(getIpAddr(vc.conn))
+	if cp == nil {
+		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		return false
+	}
+	cp.HandleCheckPoint(getIpAddr(vc.conn), m.Vbuckets, m.CheckPoints)
+    return true
 }

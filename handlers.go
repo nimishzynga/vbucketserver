@@ -5,7 +5,6 @@ import (
 	"log"
 	"vbucketserver/config"
 	"vbucketserver/server"
-    "strings"
 )
 
 func HandleUpLoadConfig(c *goweb.Context, cls *config.Cluster) {
@@ -60,9 +59,6 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 }
 
 func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) {
-	defer func() {
-		recover()
-	}()
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
@@ -74,7 +70,7 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 			log.Println("server is null")
 			return
 		}
-        //TODO:Need to fix here
+        //TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
 			log.Println("Context not found for", si.Server)
@@ -82,7 +78,34 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 		}
 		log.Println("downserver is", si.Server)
         //TODO:Need to fix here
-		ok, mp := cfgctx.HandleServerDown(si.Server[0])
+		ok, mp := cfgctx.HandleServerDown(si.Server)
+		if ok {
+			server.PushNewConfig(co, mp, true)
+		}
+	}
+}
+
+func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client) {
+	if c.IsPost() || c.IsPut() {
+		var si config.ServerUpDownInfo
+		if err := c.Fill(&si); err != nil {
+			log.Println("got error", err)
+			return
+		}
+		log.Println("si is", si)
+		if len(si.Server) == 0 {
+			log.Println("server is null")
+			return
+		}
+        //TODO:Need to fix here.Assuming all server belongs to same cluster
+		cfgctx := cls.GetContext(si.Server[0])
+		if cfgctx == nil {
+			log.Println("Context not found for", si.Server)
+			return
+		}
+		log.Println("downserver is", si.Server)
+        //TODO:Need to fix here
+		ok, mp := cfgctx.HandleReshardDown(si.Server)
 		if ok {
 			server.PushNewConfig(co, mp, true)
 		}
@@ -103,11 +126,8 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
 			return
 		}
         log.Println("got cluster name as", c.PathParams["cluster"])
-        for _,s := range si.Server {
-            server := strings.Split(s, ":")[0]
-            cls.IpMap[server] = c.PathParams["cluster"]
-        }
-        cfgctx.HandleServerAlive(si.Server, true)
+        cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
+        cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
 	}
 }
 
@@ -146,6 +166,10 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
 
 	goweb.MapFunc("/{cluster}/serverAlive", func(c *goweb.Context) {
 		HandleServerAlive(c, cls)
+	})
+
+	goweb.MapFunc("/{cluster}/reshardDown", func(c *goweb.Context) {
+		HandleReshardDown(c, cls, co)
 	})
 
 	goweb.MapFunc("/{cluster}/capacityUpdate", func(c *goweb.Context) {

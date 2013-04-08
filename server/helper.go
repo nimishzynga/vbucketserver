@@ -174,10 +174,10 @@ func getServerIndex(cp *config.Context, sr string) int {
 }
 
 func getIpFromConfig(cp *config.Context, sr string) string {
-	for s := range cp.C.Servers {
-		if strings.Split(cp.C.Servers[s], ":")[0] == sr {
+	for _,s := range append(cp.C.Servers, cp.C.SecondaryIps...) {
+		if strings.Split(s, ":")[0] == sr {
 			log.Println("Found server in config list", sr, cp.C.Servers)
-			return cp.C.Servers[s]
+			return s
 		}
 	}
 	return ""
@@ -230,7 +230,13 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
 		//Need to uncomment this
 		if _, ok := v.Ma[ip]; ok {
 			connectedServs = append(connectedServs, c.Servers[a])
-		}
+        } else if len(c.SecondaryIps) > a {
+            sip := c.SecondaryIps[a]
+		    sip = strings.Split(sip, ":")[0]
+            if _, ok := v.Ma[sip]; ok {
+			    connectedServs = append(connectedServs, c.Servers[a])
+            }
+        }
 	}
 	//connectedServs = c.Servers
 	log.Println("connect servers are", connectedServs)

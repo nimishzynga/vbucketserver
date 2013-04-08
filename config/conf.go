@@ -175,16 +175,17 @@ func (cp *Context) generateVBAmap() {
     //log.Println("generateVBAmap : vba info is", cp.VbaInfo)
 }
 
-func (cp *Context) parseIps(cfg *Config) {
+func (cp *Context) parseIps(cfg *Config) int {
     //populate the map in cp and append cp.V.Smap.ServerList
     // with servers and secondary ips 
-    cp.V.Smap.ServerList = cfg.Servers
-    count := 0
+    count := len(cp.V.Smap.ServerList)
+    start := count
+    cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, cfg.Servers...)
     sec := 0
     for i,_ := range cfg.Servers {
         if len(cfg.SecondaryIps) > i && cfg.SecondaryIps[i] != "" {
             cp.SecondaryIpMap[sec+len(cfg.Servers)] = count
-            cp.SecondaryIpMap[count] = sec + len(cfg.Servers)
+            cp.SecondaryIpMap[count] = sec + start + len(cfg.Servers)
             cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, cfg.SecondaryIps[i])
             sec++
         } else {
@@ -192,10 +193,11 @@ func (cp *Context) parseIps(cfg *Config) {
         }
         count++
     }
+    return sec
 }
 
 func (cp *Context) GenMap(cname string, cfg *Config) {
-    cp.parseIps(cfg)
+    sec := cp.parseIps(cfg)
     log.Println("config is", cfg)
 	if rv, cm, err := cp.generatevBucketMap(cfg); err == false {
 		cp.M.Lock()
@@ -211,25 +213,26 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 		cp.generateVBAmap()
         cp.copyVbucketMap() //create the vbucketmap forward
 		log.Println("capacity is", cfg.Capacity)
-		cp.updateMaxCapacity(cfg.Capacity, len(cfg.Servers), cm)
+		cp.updateMaxCapacity(cfg.Capacity, len(cfg.Servers), cm, sec)
 		//log.Println("updated map ", cp.V)
 	} else {
 		log.Fatal("failed to generate config map ")
 	}
 }
 
-func (cp *Context) updateMaxCapacity(capacity int16, totServers int, cm *[]uint32) {
+func (cp *Context) updateMaxCapacity(capacity int16, totServers int,
+    cm *[]uint32, sec int) {
 	var cc uint32 = uint32(float32(uint32(cp.C.Replica+1)*uint32(cp.C.Vbuckets))*
         (1+(float32(capacity)/100))) / uint32(totServers)
 	for i := 0; i < totServers; i++ {
-		c := ServerInfo{
-			MaxVbuckets:     cc,
-			currentVbuckets: (*cm)[i],
-		}
+        c := *NewServerInfo(cc, (*cm)[i])
         log.Println("Capacity , server :", cc, i)
 		cp.S = append(cp.S, c)
 	}
-   cp.Maxvbuckets = cc
+    for k:=0;k<sec;k++ {
+        cp.S = append(cp.S, *NewServerInfo(0,0))
+    }
+    cp.Maxvbuckets = cc
 }
 
 func (cp *Context) sameServer(index1 int, index2 int) bool {
@@ -239,6 +242,7 @@ func (cp *Context) sameServer(index1 int, index2 int) bool {
 //return the free server
 func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
     var arr []int
+    log.Println("in findFreeServer: s3 is", s3)
     if len(s3) == 0 {
         arr = make([]int, len(cp.V.Smap.ServerList))
         for i := 0; i < len(cp.V.Smap.ServerList); i++ {
@@ -251,20 +255,22 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
     for _,j := range s2 {
         for k := 0; k < len(arr); k++ {
             if cp.sameServer(arr[k], j) {
+                log.Println("removing",arr[k], j)
                 arr = append(arr[:k], arr[k+1:]...)
             }
         }
     }
     lastindex := len(arr) - 1
-	count := lastindex
 	log.Println("lastindex is", lastindex)
-	//donald knuth random shuffle algo ;)
-	for k := 0; k <= count; k++ {
+    log.Println("arr is", arr)
+    //returnIndex = 0
+	for k := 0; k <= lastindex; k++ {
+       // if cp.S[]
 		var j int32
 		if lastindex == 0 {
 			j = 0
 		} else {
-			j = rand.Int31n(int32(lastindex))
+			j = rand.Int31n(int32(lastindex)+1)
 		}
 		i := arr[j]
 		serInfo := cp.S[cp.getPrimaryIndex(i)]
@@ -316,12 +322,29 @@ func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	return dvi
 }
 
-func (cp *Context) HandleServerDown(ser string) (bool, map[string]VbaEntry) {
+func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
-	dvi := cp.getServerVbuckets(cp.getServerIndex(ser))
-	cp.M.Unlock()
-    args := []DeadVbucketInfo{*dvi}
-	return cp.HandleDeadVbuckets(args, []string{ser}, true, nil)
+    dvil := make([]DeadVbucketInfo, len(ser))
+    for i := range ser {
+        dvil[i] = *cp.getServerVbuckets(cp.getServerIndex(ser[i]))
+        dvil[i].Server = ser[i]
+    }
+    cp.M.Unlock()
+	return cp.HandleDeadVbuckets(dvil, ser, true, nil)
+}
+
+func (cp *Context) HandleReshardDown(ser []string) (bool, map[string]VbaEntry) {
+	cp.M.Lock()
+    dvil := make([]DeadVbucketInfo, len(ser))
+    for i, serv := range ser {
+        dvil[i] = *cp.getServerVbuckets(cp.getServerIndex(serv))
+        dvil[i].Transfer = dvil[i].Active
+        dvil[i].Active = dvil[i].Active[:0]
+        dvil[i].Server = serv
+    }
+    //cp.RemoveServerInfo(ser)
+    cp.M.Unlock()
+    return cp.HandleDeadVbuckets(dvil, nil, false, ser)
 }
 
 func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, map[string]VbaEntry) {
@@ -372,21 +395,24 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 
 func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi DeadVbucketInfo,
     allFailedIndex []int, allNewIndex []int) {
+    log.Println("Inside HandleTransferVbuckets")
     //transfer should be affected in FFT
     oldVbaMap := cp.VbaInfo
     vbucketMa := cp.V.Smap.VBucketMapForward
     serverList := cp.V.Smap.ServerList
     for i := range dvi.Transfer {
+        log.Println("inside transfer for loop")
         vbucket := vbucketMa[dvi.Transfer[i]]
         ser := cp.findFreeServer(vbucket[0], allFailedIndex, allNewIndex)
-        vbucket[0] = ser
         //add the new transfer entry
+        log.Println("server index are", vbucket[0], ser, serverList)
         key := serverList[vbucket[0]] + serverList[ser]
         oldEntry, ok := oldVbaMap[key]
         if ok == false {
             oldEntry.Source = serverList[vbucket[0]]
             oldEntry.Destination = serverList[ser]
         }
+        vbucket[0] = ser
         oldEntry.Transfer_VbId = append(oldEntry.Transfer_VbId, dvi.Transfer[i])
         changeVbaMap[key] = oldEntry
         oldVbaMap[key] = oldEntry
@@ -408,12 +434,13 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
         allNewIndex = append(allNewIndex, cp.getServerIndex(i))
     }
     if len(newServerList) > 0 {
-        for _,i := range sl {
-            allFailedIndex = append(allFailedIndex, cp.getServerIndex(i))
+        for _,i := range dvil {
+            allFailedIndex = append(allFailedIndex, cp.getServerIndex(i.Server))
         }
     }
-    for i,s := range sl {
+    for i := range dvil {
         dvi := dvil[i]
+        s := dvil[i].Server
         ser := cp.getServerIndex(s)
         if len(newServerList) == 0 {
             allFailedIndex = []int{ser}
@@ -558,6 +585,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
         }
 
         if serverDown {
+            log.Println("inside serverDown", ser, cp.V.Smap.ServerList)
             for i := range cp.C.Servers {
                 if cp.C.Servers[i] == cp.V.Smap.ServerList[ser] {
                     cp.C.Servers[i] = DEAD_NODE_IP
@@ -644,36 +672,54 @@ func (cp *Context) copyVbucketMap() {
     cp.V.Smap.VBucketMapForward = confMap
 }
 
-func (cp *Context) HandleServerAlive(ser []string, toAdd bool) {
-	cp.M.Lock()
-    if toAdd {
-        cp.C.Servers = append(cp.C.Servers, ser...)
+func (cp *Context) AddServerInfo(priIps []string, secIps []string) {
+    cfg := &Config {
+        Servers : priIps,
+        SecondaryIps : secIps,
     }
+    for tot := cp.parseIps(cfg) + len(priIps); tot > 0; tot-- {
+        cp.S = append(cp.S, *NewServerInfo(cp.Maxvbuckets,0))
+    }
+}
+
+//TODO:Another list for having initial config of servers.So if a server connect
+//later, it should be allowed
+//TODO:need to protect it by lock
+func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) {
+	//cp.M.Lock()
     vbuckets := cp.C.Vbuckets
-    servers := len(cp.V.Smap.ServerList) + len(ser)
-    vbucketsPerServer := int(vbuckets)/(servers*2)
-    dvil := []DeadVbucketInfo{}
-    for i := range cp.V.Smap.ServerList {
-        dvi := cp.getServerVbuckets(i)
-        for j:=0; j<vbucketsPerServer; j++ {
+    servers := len(cp.C.Servers) + len(ser)
+    vbucketsPerServer := len(ser)*((int(vbuckets)/(servers))/len(cp.C.Servers))
+    dvil := make([]DeadVbucketInfo, len(cp.C.Servers))
+    activeVbMap := make(map[int]int)
+    for i, serv := range cp.C.Servers {
+        dvi := cp.getServerVbuckets(cp.getServerIndex(serv))
+        dvil[i].Server = serv
+        count := 0
+        for j:=0; j < len(dvi.Replica);j++ {
+            if activeVbMap[dvi.Replica[j]] == 1 {
+                continue
+            }
             dvil[i].Replica = append(dvil[i].Replica, dvi.Replica[j])
+            count++
+            if count == vbucketsPerServer {
+                break
+            }
+        }
+        for j:=0; j<vbucketsPerServer && j < len(dvi.Active); j++ {
+            dvil[i].Transfer = append(dvil[i].Transfer, dvi.Active[j])
+            activeVbMap[dvi.Active[j]] = 1
         }
     }
-    for _ = range(ser) {
-        c := []ServerInfo{}
-        cp.S = append(cp.S, c...)
+    if toAdd {
+        //TODO:Need to check if duplicate ip is getting added
+        cp.C.Servers = append(cp.C.Servers, ser...)
+        cp.C.SecondaryIps = append(cp.C.SecondaryIps, secIp...)
     }
-    serverList := cp.V.Smap.ServerList
-    cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, ser...)
-    dvil = dvil[:0]
-    for i := range cp.V.Smap.ServerList {
-        dvi := cp.getServerVbuckets(i)
-        for j:=0; j<vbucketsPerServer; j++ {
-            dvil[i].Transfer = append(dvil[i].Active, dvi.Active[j])
-        }
-    }
-    cp.HandleDeadVbuckets(dvil, serverList, false, ser)
-    cp.M.Unlock()
+    cp.AddServerInfo(ser, secIp)
+    log.Println("calling HandleDeadVbuket", dvil, ser)
+    cp.HandleDeadVbuckets(dvil, nil, false, ser)
+   // cp.M.Unlock()
 }
 
 func (cp *Context) getServerIndex(si string) int {
@@ -683,8 +729,22 @@ func (cp *Context) getServerIndex(si string) int {
 			return i
 		}
 	}
-	log.Println("server list is", s)
+	log.Println("Index not found.server list is", s, si)
 	return -1
+}
+
+func (cp *Context) HandleCheckPoint(si string, v Vblist, c Vblist) bool {
+    if len(v.Master) != len(c.Master) || len(v.Replica) != len(c.Replica) {
+        return false
+    }
+    m := cp.S[cp.getServerIndex(si)].ckPointMap
+    for i,k := range v.Master {
+        m[k] = c.Master[i]
+    }
+    for i,k := range v.Replica {
+        m[k] = c.Replica[i]
+    }
+    return true
 }
 
 func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
@@ -713,12 +773,12 @@ func (cls *Cluster) GetContextFromClusterName(clusterName string) *Context {
 	return cp
 }
 
-func (cp *Context) getMasterServer(vb int) int {
+func (cp *Context) getMasterServer(vb int, s int) int {
     vbucket := cp.V.Smap.VBucketMap[vb]
     for i:= range vbucket {
         if vbucket[i] == REPLICA_RESTORE {
             //Put the server index in the map
-            vbucket[i] = vb
+            vbucket[i] = s
             break
         }
     }
@@ -732,9 +792,10 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
     log.Println("inside HandleRestoreCheckPoints for ip", ip, vb.Replica)
     for i,vb := range vb.Replica {
         src := cp.getServerIndex(ip)
-        ms := cp.getMasterServer(vb)
+        ms := cp.getMasterServer(vb, src)
         if src == -1 || ms == -1 {
-            log.Panic("src and ms", src, ms, ip, vb)
+            log.Println("Error in getting HandleRestoreCheckPoints src ms",src,ms)
+            return nil
         }
         key := serverList[ms] + serverList[src]
         oldEntry,ok := cp.VbaInfo[key]
@@ -816,14 +877,26 @@ func (cls *Cluster) GetContext(ip string) *Context {
 }
 
 func (cls *Cluster) GenerateIpMap() bool {
-	for key, cfg := range cls.ConfigMap {
-		for i := range cfg.Servers {
-			server := strings.Split(cfg.Servers[i], ":")[0]
-			if _, ok := cls.IpMap[server]; ok {
-				return false
-			}
-			cls.IpMap[server] = key
-		}
-	}
-	return true
+    for key, cfg := range cls.ConfigMap {
+        cls.AddIpToIpMap(cfg.Servers, cfg.SecondaryIps, key)
+    }
+    return true
+}
+
+func (cls *Cluster) AddIpToIpMap(p []string, s []string, c string) {
+//It will add ip to the ipmap
+        for _,s := range p {
+            if s == "" {
+                continue
+            }
+            server := strings.Split(s, ":")[0]
+            cls.IpMap[server] = c
+        }
+        for _,s := range s {
+            if s == "" {
+                continue
+            }
+            server := strings.Split(s, ":")[0]
+            cls.IpMap[server] = c
+        }
 }

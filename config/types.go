@@ -10,6 +10,7 @@ type ServerInfo struct {
 	MaxVbuckets     uint32
 	NumberOfDisk    int16
     ReplicaVbuckets []int
+    ckPointMap      map[int]int
 }
 
 type Cluster struct {
@@ -60,7 +61,8 @@ type VbaEntry struct {
 }
 
 type ServerUpDownInfo struct {
-	Server []string
+	Server  []string
+    SecIp   []string
 }
 
 type CapacityUpdateInfo struct {
@@ -89,7 +91,7 @@ type Context struct {
 	V               VBucketInfo  // vbucketMap to send to client
 	S               []ServerInfo // per server information
 	VbaInfo         map[string]VbaEntry
-    SecondaryIpMap   map[int]int
+    SecondaryIpMap  map[int]int
     Maxvbuckets     uint32
     Rebalance       bool
 	M       sync.RWMutex
@@ -109,4 +111,13 @@ func NewCluster() *Cluster {
 		IpMap:      make(map[string]string),
 	}
 	return cl
+}
+
+func NewServerInfo(max uint32, curr uint32) *ServerInfo {
+    si := ServerInfo {
+        MaxVbuckets:max,
+        currentVbuckets:curr,
+        ckPointMap:make(map[int]int),
+    }
+    return &si
 }
