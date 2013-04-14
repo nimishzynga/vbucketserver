@@ -21,20 +21,10 @@ func (gc *GenericClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) b
 }
 
 func (gc *GenericClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bool {
-	if m.Cmd == MSG_ALIVE_STR {
+    log.Println("inside handleAlive")
+    if m.Cmd == MSG_ALIVE_STR {
 		return true
 	}
-    if m.Cmd == MSG_TRANSFER_STR {
-        changeMap := cls.HandleTransferDone(m.Server, m.Destination, m.Vbuckets)
-        //push config only to VBA
-        go PushNewConfig(co, changeMap, false)
-        return true
-    }
-    if m.Status == MSG_ERROR_STR {
-        log.Println("VBA ERROR:", m.Detail)
-        /*dont disconnect VBA if error comes*/
-        return true
-    }
 	return false
 }
 
@@ -180,6 +170,26 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 		go PushNewConfig(co, mp, true)
 	}
 	return true
+}
+
+func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bool {
+    log.Println("inside handleAlive")
+    if m.Cmd == MSG_ALIVE_STR {
+		return true
+	}
+    if m.Cmd == MSG_TRANSFER_STR {
+        log.Println("calling HandleTransferDone")
+        changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
+        //push config only to VBA
+        go PushNewConfig(co, changeMap, false)
+        return true
+    }
+    if m.Status == MSG_ERROR_STR {
+        log.Println("VBA ERROR:", m.Detail)
+        /*dont disconnect VBA if error comes*/
+        return true
+    }
+	return false
 }
 
 func (vc *VbaClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {

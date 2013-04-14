@@ -197,6 +197,7 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int) {
 
 //push the config to all the VBA's and Moxi
 func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool) {
+    log.Println("In pushnewconfig")
 	ma := make(map[string]int)
 	for _, en := range m {
 		if len(en.VbId) > 0 {

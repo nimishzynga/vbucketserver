@@ -17,7 +17,9 @@ type Cluster struct {
 	ContextMap map[string]*Context //cluster name to context
 	ConfigMap  map[string]Config   //cluster name to config
 	IpMap      map[string]string   //ip addess to cluster name
+    State      int
 	M          sync.RWMutex
+    state      int
 }
 
 type Config struct {
@@ -85,6 +87,13 @@ type VbucketCountBoth struct {
     secondary VbucketCount
 }
 
+type callBackInfo struct {
+    vbMap   map[int]int
+    count   int
+    data    interface{}
+    cb      func(interface{}) interface{}
+}
+
 //Have a map for ips here.
 type Context struct {
 	C               Config       //input Config
@@ -94,7 +103,8 @@ type Context struct {
     SecondaryIpMap  map[int]int
     Maxvbuckets     uint32
     Rebalance       bool
-	M       sync.RWMutex
+    Cbi             *callBackInfo
+	M               sync.RWMutex
 }
 
 func NewContext() *Context {
@@ -120,4 +130,12 @@ func NewServerInfo(max uint32, curr uint32) *ServerInfo {
         ckPointMap:make(map[int]int),
     }
     return &si
+}
+
+func NewCallBackInfo(fn func(interface{}) interface{}) *callBackInfo {
+    cbi := &callBackInfo{
+        vbMap : make(map[int]int),
+        cb : fn,
+    }
+    return cbi
 }

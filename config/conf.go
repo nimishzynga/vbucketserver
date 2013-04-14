@@ -9,6 +9,8 @@ import (
 const (
 	DEAD_NODE_IP = "0.0.0.0:11211"
     REPLICA_RESTORE = -2
+    RESHARD_CONT = 1
+    RESHARD_DONE = 0
 )
 
 //return the secondary ip given any ip
@@ -333,6 +335,12 @@ func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 	return cp.HandleDeadVbuckets(dvil, ser, true, nil)
 }
 
+func (cp *Context) RemoveServerInfo(priIps []string, secIps []string) {
+    for k:=0; k<len(priIps); k++ {
+        cp.S[cp.getServerIndex(priIps[k])].MaxVbuckets = 0
+    }
+}
+
 func (cp *Context) HandleReshardDown(ser []string) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
     dvil := make([]DeadVbucketInfo, len(ser))
@@ -342,9 +350,9 @@ func (cp *Context) HandleReshardDown(ser []string) (bool, map[string]VbaEntry) {
         dvil[i].Active = dvil[i].Active[:0]
         dvil[i].Server = serv
     }
-    //cp.RemoveServerInfo(ser)
+    cp.RemoveServerInfo(ser, nil)
     cp.M.Unlock()
-    return cp.HandleDeadVbuckets(dvil, nil, false, ser)
+    return cp.HandleDeadVbuckets(dvil, nil, false, nil)
 }
 
 func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, map[string]VbaEntry) {
@@ -417,6 +425,14 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
         changeVbaMap[key] = oldEntry
         oldVbaMap[key] = oldEntry
     }
+}
+
+func (cp *Context) VerifyCheckPoints(s int, d int, v int) bool {
+    if cp.S[s].ckPointMap[v] == cp.S[d].ckPointMap[v] == false {
+        log.Println("check point not matching source destination vbucket checkpoints", s,d,v, cp.S[s].ckPointMap[v], cp.S[d].ckPointMap[v])
+        return false
+    }
+    return true
 }
 
 func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serverDown bool,
@@ -493,6 +509,10 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
             for i := 0; i < len(dvi.Active); i++ {
                 vbucket := vbucketMa[dvi.Active[i]]
                 for k := 1; k < len(vbucket); k++ {
+                    //TODO:Need to verify if this condition is needed
+                    if vbucket[k] < 0 {
+                        continue
+                    }
                     key := serverList[vbucket[0]] + serverList[vbucket[k]]
                     oldEntry := oldVbaMap[key]
                     for r := 0; r < len(oldEntry.VbId); r++ {
@@ -517,6 +537,11 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
                 if k == len(vbucket) {
                     log.Println("CRITICAL:Not enough capacity for active vbuckets")
                     return true,changeVbaMap
+                }
+                if vbucketMa[dvi.Active[i]][k] == REPLICA_RESTORE ||
+                    cp.VerifyCheckPoints(vbucket[0], vbucket[k], dvi.Active[i]) == false {
+                    log.Println("Need manual restore for vbucket", dvi.Active)
+                    continue
                 }
                 vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][k]
                 serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], allFailedIndex, allNewIndex)
@@ -685,7 +710,9 @@ func (cp *Context) AddServerInfo(priIps []string, secIps []string) {
 //TODO:Another list for having initial config of servers.So if a server connect
 //later, it should be allowed
 //TODO:need to protect it by lock
-func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) {
+//need to remove the condition that only active or replica can be moved. Need to handle
+//case when multiple servers are added
+func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (bool, map[string]VbaEntry) {
 	//cp.M.Lock()
     vbuckets := cp.C.Vbuckets
     servers := len(cp.C.Servers) + len(ser)
@@ -718,7 +745,7 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) {
     }
     cp.AddServerInfo(ser, secIp)
     log.Println("calling HandleDeadVbuket", dvil, ser)
-    cp.HandleDeadVbuckets(dvil, nil, false, ser)
+    return cp.HandleDeadVbuckets(dvil, nil, false, ser)
    // cp.M.Unlock()
 }
 
@@ -821,15 +848,26 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[str
     if cp == nil {
         return nil
     }
+    log.Println("In transfer done")
 	serverList := cp.V.Smap.ServerList
     changeVbaMap := make(map[string]VbaEntry)
     vbucketMa := cp.V.Smap.VBucketMap
+    vbucketMaFwd := cp.V.Smap.VBucketMapForward
     src := cp.getServerIndex(ip)
-    d := cp.getServerIndex(dst)
+    if src == -1 {
+        log.Println("in HandleTransferDone src", src)
+        return nil
+    }
     oldVbaMap := cp.VbaInfo
     for _,vb := range vb.Master {
+        d := vbucketMaFwd[vb][0]
         vbucket := vbucketMa[vb]
         for k := 1; k < len(vbucket); k++ {
+            log.Println("in HandleTransferDone src, k", src, k)
+            if vbucket[k] < 0 {
+                log.Println("ha ha ha HandleTransferDone")
+                continue
+            }
             key := serverList[src] + serverList[vbucket[k]]
             oldEntry,_ := oldVbaMap[key]
             for r := 0; r < len(oldEntry.VbId); r++ {
@@ -844,12 +882,11 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[str
                 changeVbaMap[key] = oldEntry
                 oldVbaMap[key] = oldEntry
             }
-            vbucket[0] = d
             for k := 1; k < len(vbucket); k++ {
-                key := serverList[vbucket[0]] + serverList[vbucket[k]]
+                key := serverList[d] + serverList[vbucket[k]]
                 oldEntry, ok := oldVbaMap[key]
                 if ok == false {
-                    oldEntry.Source = serverList[vbucket[0]]
+                    oldEntry.Source = serverList[d]
                     oldEntry.Destination = serverList[vbucket[k]]
                 }
                 oldEntry.VbId = append(oldEntry.VbId, vb)
@@ -857,8 +894,17 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[str
                 oldVbaMap[key] = oldEntry
             }
         }
+        vbucket[0] = d
+    }
+    if sameMap(vbucketMa, vbucketMaFwd) {
+        cp.copyVbucketMap()
+        cls.State = RESHARD_DONE
     }
     return changeVbaMap
+}
+
+func sameMap(a,b [][]int) bool {
+    return false
 }
 
 func (cls *Cluster) GetContext(ip string) *Context {
@@ -899,4 +945,12 @@ func (cls *Cluster) AddIpToIpMap(p []string, s []string, c string) {
             server := strings.Split(s, ":")[0]
             cls.IpMap[server] = c
         }
+}
+
+func (cls *Cluster) SetReshard() bool {
+    if cls.State == RESHARD_CONT {
+        return false
+    }
+    cls.State = RESHARD_CONT
+    return true
 }

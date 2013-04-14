@@ -97,6 +97,11 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			log.Println("server is null")
 			return
 		}
+        if cls.SetReshard() == false {
+            data := "Reshard is already going on.Please try later"
+	        c.WriteResponse(data, 200)
+            return
+        }
         //TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
@@ -112,7 +117,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 	}
 }
 
-func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
+func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client) {
     log.Println("Adding new server")
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
@@ -127,7 +132,10 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster) {
 		}
         log.Println("got cluster name as", c.PathParams["cluster"])
         cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
-        cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
+		ok, mp := cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
+		if ok {
+			server.PushNewConfig(co, mp, true)
+		}
 	}
 }
 
@@ -165,7 +173,7 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
 	})
 
 	goweb.MapFunc("/{cluster}/serverAlive", func(c *goweb.Context) {
-		HandleServerAlive(c, cls)
+		HandleServerAlive(c, cls, co)
 	})
 
 	goweb.MapFunc("/{cluster}/reshardDown", func(c *goweb.Context) {
