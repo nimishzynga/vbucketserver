@@ -2,6 +2,7 @@ package config
 
 import (
 	"sync"
+    "time"
 )
 
 //per server info structure
@@ -65,6 +66,7 @@ type VbaEntry struct {
 type ServerUpDownInfo struct {
 	Server  []string
     SecIp   []string
+    Capacity int
 }
 
 type CapacityUpdateInfo struct {
@@ -73,7 +75,7 @@ type CapacityUpdateInfo struct {
 }
 
 type Vblist struct {
-	Master  []int
+	Active  []int
 	Replica []int
 }
 
@@ -101,8 +103,10 @@ type Context struct {
 	S               []ServerInfo // per server information
 	VbaInfo         map[string]VbaEntry
     SecondaryIpMap  map[int]int
+    FailedNodes     map[string]int
     Maxvbuckets     uint32
     Rebalance       bool
+    T               time.Time
     Cbi             *callBackInfo
 	M               sync.RWMutex
 }
@@ -110,6 +114,8 @@ type Context struct {
 func NewContext() *Context {
     ct := &Context{
         SecondaryIpMap : make(map[int]int),
+        FailedNodes    : make(map[string]int),
+        T  :  time.Now(),
     }
     return ct
 }

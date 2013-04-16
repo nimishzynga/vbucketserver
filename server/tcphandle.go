@@ -35,6 +35,7 @@ const (
 	MSG_ALIVE_STR  = "ALIVE"
 	MSG_CONFIG_STR = "CONFIG"
 	MSG_FAIL_STR   = "FAIL"
+	MSG_DEAD_VB_STR  = "DEAD_VBUCKETS"
     MSG_ERROR_STR  = "ERROR"
     MSG_TRANSFER_STR = "TRANSFER_DONE"
     MSG_CKPOINT_STR = "CKPOINT"
@@ -72,6 +73,7 @@ type VbsClient interface {
 	HandleAlive(*config.Cluster, *Client, *RecvMsg) bool
 	HandleUpdateConfig(*config.Cluster) bool
     HandleCheckPoint(*RecvMsg, *config.Cluster) bool
+    HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Client) bool
 }
 
 func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
@@ -129,9 +131,18 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 	defer func() {
 		conn.Close()
 		log.Println("disconnecting client", getIpAddr(conn))
-		if vc != nil {
-			RemoveConn(conn, co, vc.ClientType())
-		}
+        if vc != nil {
+            cp := cls.GetContext(getIpAddr(conn))
+            if cp == nil {
+                log.Println("Not able to find context for", getIpAddr(conn))
+            } else if si := getServerIndex(cp, getIpAddr(conn)); si == -1 {
+                log.Println("handleRead server not found", getIpAddr(conn))
+            } else {
+                m := &RecvMsg{Server:cp.V.Smap.ServerList[si],}
+                vc.HandleFail(m, cls, co)
+            }
+            RemoveConn(conn, co, vc.ClientType())
+        }
         close(c)
 	}()
 
@@ -259,6 +270,9 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
                 return STATUS_SUCCESS
             } else if m.Cmd == MSG_CKPOINT_STR {
                 vc.HandleCheckPoint(m, cls)
+                return STATUS_SUCCESS
+            } else if m.Cmd == MSG_DEAD_VB_STR {
+                vc.HandleDeadvBuckets(m, cls, co)
                 return STATUS_SUCCESS
             }
         }

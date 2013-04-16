@@ -324,15 +324,32 @@ func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	return dvi
 }
 
+func (cp *Context) HandleServerDown(ser string) bool {
+    t := cp.T.Second()
+    if val, ok := cp.FailedNodes[ser]; ok {
+        if t - val > MAX_FAIL_TIME {
+            cp.FailedNodes[ser] = t
+            return false
+        }
+        delete(cp.FailedNodes, ser)
+        return true
+    }
+    cp.FailedNodes[ser] = t
+    return false
+}
+
 func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
     dvil := make([]DeadVbucketInfo, len(ser))
     for i := range ser {
+        if cp.checkFail() == false {
+            continue
+        }
         dvil[i] = *cp.getServerVbuckets(cp.getServerIndex(ser[i]))
         dvil[i].Server = ser[i]
     }
     cp.M.Unlock()
-	return cp.HandleDeadVbuckets(dvil, ser, true, nil)
+	return cp.HandleDeadVbuckets(dvil, ser, true, nil, true)
 }
 
 func (cp *Context) RemoveServerInfo(priIps []string, secIps []string) {
@@ -341,7 +358,17 @@ func (cp *Context) RemoveServerInfo(priIps []string, secIps []string) {
     }
 }
 
-func (cp *Context) HandleReshardDown(ser []string) (bool, map[string]VbaEntry) {
+func (cp *Context) changeNewCapacity(capacity int) {
+    totServers := len(cp.V.Smap.ServerList)
+    var cc uint32 = uint32(float32(uint32(cp.C.Replica+1)*uint32(cp.C.Vbuckets))*
+    (1+(float32(capacity)/100))) / uint32(totServers)
+    for k:=0;k<totServers;k++ {
+        cp.S[k].MaxVbuckets = cc
+    }
+    cp.Maxvbuckets = cc
+}
+
+func (cp *Context) HandleReshardDown(ser []string, c int) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
     dvil := make([]DeadVbucketInfo, len(ser))
     for i, serv := range ser {
@@ -351,8 +378,9 @@ func (cp *Context) HandleReshardDown(ser []string) (bool, map[string]VbaEntry) {
         dvil[i].Server = serv
     }
     cp.RemoveServerInfo(ser, nil)
+    cp.changeNewCapacity(c)
     cp.M.Unlock()
-    return cp.HandleDeadVbuckets(dvil, nil, false, nil)
+    return cp.HandleDeadVbuckets(dvil, nil, false, nil, true)
 }
 
 func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, map[string]VbaEntry) {
@@ -436,7 +464,7 @@ func (cp *Context) VerifyCheckPoints(s int, d int, v int) bool {
 }
 
 func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serverDown bool,
-    newServerList []string) (bool, map[string]VbaEntry) {
+    newServerList []string, capHandle bool) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
 	defer cp.M.Unlock()
 	oldVbaMap := cp.VbaInfo
@@ -497,7 +525,9 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
         }
         log.Println("Failed vbuckets :", dvi)
         log.Println("old vbucket map was", vbucketMa)
-        cp.reduceCapacity(ser, dvi.DisksFailed, uint32(len(dvi.Active)+len(dvi.Replica)))
+        if capHandle {
+            cp.reduceCapacity(ser, dvi.DisksFailed, uint32(len(dvi.Active)+len(dvi.Replica)))
+        }
 
         if cp.V.Smap.NumReplicas == 0 {
             _,changeVbaMap = cp.handleNoReplicaFailure(dvi, ser)
@@ -737,6 +767,9 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
             dvil[i].Transfer = append(dvil[i].Transfer, dvi.Active[j])
             activeVbMap[dvi.Active[j]] = 1
         }
+        totVbuckets := len(dvil[i].Transfer)+len(dvil[i].Replica)
+        si := cp.S[cp.getServerIndex(serv)]
+        si.currentVbuckets += uint32(totVbuckets)
     }
     if toAdd {
         //TODO:Need to check if duplicate ip is getting added
@@ -745,7 +778,7 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
     }
     cp.AddServerInfo(ser, secIp)
     log.Println("calling HandleDeadVbuket", dvil, ser)
-    return cp.HandleDeadVbuckets(dvil, nil, false, ser)
+    return cp.HandleDeadVbuckets(dvil, nil, false, ser, false)
    // cp.M.Unlock()
 }
 
@@ -761,12 +794,12 @@ func (cp *Context) getServerIndex(si string) int {
 }
 
 func (cp *Context) HandleCheckPoint(si string, v Vblist, c Vblist) bool {
-    if len(v.Master) != len(c.Master) || len(v.Replica) != len(c.Replica) {
+    if len(v.Active) != len(c.Active) || len(v.Replica) != len(c.Replica) {
         return false
     }
     m := cp.S[cp.getServerIndex(si)].ckPointMap
-    for i,k := range v.Master {
-        m[k] = c.Master[i]
+    for i,k := range v.Active {
+        m[k] = c.Active[i]
     }
     for i,k := range v.Replica {
         m[k] = c.Replica[i]
@@ -859,7 +892,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[str
         return nil
     }
     oldVbaMap := cp.VbaInfo
-    for _,vb := range vb.Master {
+    for _,vb := range vb.Active {
         d := vbucketMaFwd[vb][0]
         vbucket := vbucketMa[vb]
         for k := 1; k < len(vbucket); k++ {

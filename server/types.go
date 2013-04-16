@@ -39,6 +39,7 @@ type RecvMsg struct {
 	Capacity int
     CheckPoints config.Vblist
     Destination string
+    DisksFailed int
 }
 
 type InitMsg struct {

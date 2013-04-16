@@ -33,7 +33,6 @@ func (gc *GenericClient) HandleInit(ch chan string, cp *config.Cluster, co *Clie
 }
 
 func (gc *GenericClient) HandleFail(m *RecvMsg, cp *config.Cluster, co *Client) bool {
-	log.Println("invalid client")
 	return false
 }
 
@@ -42,6 +41,10 @@ func (gc *GenericClient) HandleUpdateConfig(cp *config.Cluster) bool {
 }
 
 func (gc *GenericClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
+    return false
+}
+
+func (gc *GenericClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Client) bool {
     return false
 }
 
@@ -151,7 +154,10 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 	}
     if m.Status == MSG_ERROR_STR {
         log.Println("VBA ERROR:", m.Detail)
-        /*dont disconnect VBA if error comes*/
+        //nuke the bastard
+        log.Println("Server failure: since vba reported it", getIpAddr(vc.conn),
+            m.Detail)
+        vc.HandleFail(m, cls, co)
         return true
     }
 	return false
@@ -164,11 +170,30 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 		log.Println("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
-	ok, mp := cp.HandleServerDown([]string{m.Server})
-	if ok {
-		//need to call it on client info
-		go PushNewConfig(co, mp, true)
+    ok, mp := cp.HandleServerDown([]string{m.Destination})
+    if ok {
+        PushNewConfig(co, mp, true)
+    }
+	return true
+}
+
+func (vc *VbaClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Client) bool {
+	log.Println("inside handleFail")
+	cp := cls.GetContext(getIpAddr(vc.conn))
+	if cp == nil {
+		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		return false
 	}
+    var dvi config.DeadVbucketInfo
+    dvi.Server = getIpAddr(vc.conn)
+    dvi.Active = m.Vbuckets.Active
+    dvi.Replica = m.Vbuckets.Replica
+    args := []config.DeadVbucketInfo{dvi}
+    str := []string{dvi.Server}
+    ok, mp := cp.HandleDeadVbuckets(args, str, false, nil, true)
+    if ok {
+        PushNewConfig(co, mp, true)
+    }
 	return true
 }
 

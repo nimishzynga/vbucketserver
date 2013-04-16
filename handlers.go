@@ -51,7 +51,7 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 		}
         args := []config.DeadVbucketInfo{dvi}
         str := []string{dvi.Server}
-		ok, mp := cp.HandleDeadVbuckets(args, str, false, nil)
+		ok, mp := cp.HandleDeadVbuckets(args, str, false, nil, true)
 		if ok {
 			server.PushNewConfig(co, mp, true)
 		}
@@ -110,7 +110,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 		}
 		log.Println("downserver is", si.Server)
         //TODO:Need to fix here
-		ok, mp := cfgctx.HandleReshardDown(si.Server)
+		ok, mp := cfgctx.HandleReshardDown(si.Server, si.Capacity)
 		if ok {
 			server.PushNewConfig(co, mp, true)
 		}
