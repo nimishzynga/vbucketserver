@@ -131,6 +131,18 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			return
 		}
         log.Println("got cluster name as", c.PathParams["cluster"])
+        for _, serv := range si.Server {
+            if serv == "" {
+                log.Println("Invalid server in server alive")
+                return
+            }
+            for _,s := range cfgctx.C.Servers {
+                if s == serv {
+                    log.Println("Server already in server alive")
+                    return
+                }
+            }
+        }
         cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
 		ok, mp := cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
 		if ok {

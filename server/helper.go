@@ -102,7 +102,14 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 				if cp == nil {
 					break
 				}
+
 				for _, entry := range cp.VbaInfo {
+                    s := getServerIndex(cp, entry.Source)
+                    d := getServerIndex(cp, ip)
+                    if cp.SameServer(s, d) {
+						m.Data = append(m.Data, entry)
+                    }
+                   /* 
 					if strings.Split(entry.Source, ":")[0] == ip {
 						if index := getServerIndex(cp, ip); index != -1 {
 							if len(cp.C.SecondaryIps) > index {
@@ -110,7 +117,16 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 									entry.Source = cp.C.SecondaryIps[index]
 								}
 							}
-						}
+						} else {
+                            if index := getServerIndex(cp, entry.Source); index != -1 {
+								if len(cp.C.SecondaryIps) > index {
+									if secondIp := cp.C.SecondaryIps[index]; secondIp != "" {
+						
+                        
+                        
+                        
+                        }
+                        /*
 						dest := strings.Split(entry.Destination, ":")[0]
 						if dest != "" {
 							if index := getServerIndex(cp, dest); index != -1 {
@@ -121,8 +137,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 								}
 							}
 						}
-						m.Data = append(m.Data, entry)
-					}
+					}*/
 				}
 				if index := getServerIndex(cp, ip); index != -1 {
 					replicas := cp.S[index]
@@ -150,8 +165,7 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 	for key, cfg := range cls.ConfigMap {
 		serverList := cfg.Servers
 		checkVBAs(&cfg, co.Vba)
-		cp := &config.Context{}
-        cp.SecondaryIpMap = make(map[int]int)
+		cp := config.NewContext()
 		cp.GenMap(key, &cfg)
 		cp.C.Servers = serverList
 		cls.ContextMap[key] = cp

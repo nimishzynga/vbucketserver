@@ -106,6 +106,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 	}
 	index := getServerIndex(cp, ip)
 	if index == -1 {
+        /*
         if ip := getIpFromConfig(cp, ip);ip != "" {
             //TODO:need to fix the secondary ip in the call
             cp.HandleServerAlive([]string{ip}, nil, false)
@@ -113,8 +114,10 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
         } else {
             log.Println("Server not in list", ip)
             return false
-        }
-	}
+        }*/
+        log.Println("Server not in list", ip)
+        return false
+    }
 	si := cp.S[index]
 	si.NumberOfDisk = int16(capacity)
     si.MaxVbuckets = cp.Maxvbuckets
@@ -164,6 +167,7 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 }
 
 func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
+    return true
 	log.Println("inside handleFail")
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {

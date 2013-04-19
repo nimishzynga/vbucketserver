@@ -47,7 +47,7 @@ const (
 	HEADER_SIZE    = 4
 	HBTIME         = 30
 	MAX_TIMEOUT    = 3
-	VBA_WAIT_TIME  = 5
+	VBA_WAIT_TIME  = 30
 	CHN_NOTIFY_STR = "NOTIFY"
 	CHN_CLOSE_STR  = "CLOSE"
 	CLIENT_VBA     = "VBA"
@@ -168,8 +168,8 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 
 	for {
 		select {
-		case <-c1:
-			log.Println("error on socket")
+        case err := <-c1:
+			log.Println("error on socket", err)
 			return
 		case data = <-c2:
 			currTimeouts = 0
@@ -202,7 +202,9 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 						if length > RECV_BUF_LEN {
 							log.Println("Data size is more", length)
 							return
-						}
+						} else {
+                            log.Println("got length", length)
+                        }
 						fullData = fullData[HEADER_SIZE:]
 						n -= HEADER_SIZE
 					} else {
@@ -225,6 +227,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			}
 
 			if state == STATE_INIT_RES {
+                log.Println("got response for init", *m)
 				vc = getClient(m.Agent, conn, c)
 			}
 
@@ -281,22 +284,26 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
     case STATE_INIT_RES:
         vc.HandleInit(i, cls, co, m.Capacity)
         *s = STATE_CONFIG_RES
+        break;
 
     case STATE_CONFIG_RES:
         if vc.HandleOk(cls, co, m) {
             *s = STATE_ALIVE
         }
+        break;
 
     case STATE_ALIVE:
         if vc.HandleAlive(cls, co, m) == false {
             return STATUS_ERR
         }
+        break;
 
     case STATE_UPDATE_CONFIG:
         if vc.HandleUpdateConfig(cls) == false {
             return STATUS_ERR
         }
         *s = STATE_CONFIG_RES
+        break;
     }
     return STATUS_SUCCESS
 }

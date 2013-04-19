@@ -11,11 +11,12 @@ const (
     REPLICA_RESTORE = -2
     RESHARD_CONT = 1
     RESHARD_DONE = 0
+    MAX_FAIL_TIME = 30
 )
 
 //return the secondary ip given any ip
 //return the same ip, if it is secondary
-func (cp *Context) getSecondaryIp(ip string) string {
+func (cp *Context) GetSecondaryIp(ip string) string {
     index := cp.getServerIndex(ip)
     if in := cp.getSecondaryIndex(index); in != -1 {
         return cp.V.Smap.ServerList[in]
@@ -38,7 +39,7 @@ func (cp *Context) getSecondaryIndex(i int) int {
 
 //return the primary ip
 //return the same ip, if it is primary
-func (cp *Context) getPrimaryIp(ip string) string {
+func (cp *Context) GetPrimaryIp(ip string) string {
     index := cp.getServerIndex(ip)
     if in := cp.getPrimaryIndex(index); in != -1 {
         return cp.V.Smap.ServerList[in]
@@ -237,7 +238,7 @@ func (cp *Context) updateMaxCapacity(capacity int16, totServers int,
     cp.Maxvbuckets = cc
 }
 
-func (cp *Context) sameServer(index1 int, index2 int) bool {
+func (cp *Context) SameServer(index1 int, index2 int) bool {
     return cp.getPrimaryIndex(index1) == cp.getPrimaryIndex(index2)
 }
 
@@ -256,7 +257,7 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
     s2 = append(s2, s)
     for _,j := range s2 {
         for k := 0; k < len(arr); k++ {
-            if cp.sameServer(arr[k], j) {
+            if cp.SameServer(arr[k], j) {
                 log.Println("removing",arr[k], j)
                 arr = append(arr[:k], arr[k+1:]...)
             }
@@ -324,7 +325,7 @@ func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	return dvi
 }
 
-func (cp *Context) HandleServerDown(ser string) bool {
+func (cp *Context) checkFail(ser string) bool {
     t := cp.T.Second()
     if val, ok := cp.FailedNodes[ser]; ok {
         if t - val > MAX_FAIL_TIME {
@@ -342,9 +343,10 @@ func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
     dvil := make([]DeadVbucketInfo, len(ser))
     for i := range ser {
-        if cp.checkFail() == false {
+        /*
+        if cp.checkFail(ser[i]) == false {
             continue
-        }
+        }*/
         dvil[i] = *cp.getServerVbuckets(cp.getServerIndex(ser[i]))
         dvil[i].Server = ser[i]
     }
@@ -615,7 +617,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
                 }
                 var j int
                 for j = 0; j < len(vbucket); j++ {
-                    if vbucket[j] == ser {
+                    if cp.SameServer(vbucket[j], ser) {
                         log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
                         serverIndex := cp.findFreeServer(vbucket[0], allFailedIndex, allNewIndex)
                         if serverIndex == -1 {
@@ -642,12 +644,13 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
         if serverDown {
             log.Println("inside serverDown", ser, cp.V.Smap.ServerList)
             for i := range cp.C.Servers {
-                if cp.C.Servers[i] == cp.V.Smap.ServerList[ser] {
+                if cp.GetPrimaryIp(cp.C.Servers[i]) == cp.GetPrimaryIp(cp.V.Smap.ServerList[ser]) {
                     cp.C.Servers[i] = DEAD_NODE_IP
                     break
                 }
             }
-            cp.V.Smap.ServerList[ser] = DEAD_NODE_IP
+            cp.V.Smap.ServerList[cp.getPrimaryIndex(ser)] = DEAD_NODE_IP
+            cp.V.Smap.ServerList[cp.getSecondaryIndex(ser)] = DEAD_NODE_IP
         }
     }
     log.Println("new vbucket map was", vbucketMa)
@@ -768,6 +771,7 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
             activeVbMap[dvi.Active[j]] = 1
         }
         totVbuckets := len(dvil[i].Transfer)+len(dvil[i].Replica)
+        log.Println("HandleServerAlive server is", serv)
         si := cp.S[cp.getServerIndex(serv)]
         si.currentVbuckets += uint32(totVbuckets)
     }
@@ -851,7 +855,13 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
     serverToInfo := make(map[string]int)
     log.Println("inside HandleRestoreCheckPoints for ip", ip, vb.Replica)
     for i,vb := range vb.Replica {
-        src := cp.getServerIndex(ip)
+        src := 0
+        if i%2 == 0 {
+            src = cp.getServerIndex(cp.GetPrimaryIp(ip))
+        } else {
+            src = cp.getServerIndex(cp.GetSecondaryIp(ip))
+        }
+        //this is putting the vbucket in the map
         ms := cp.getMasterServer(vb, src)
         if src == -1 || ms == -1 {
             log.Println("Error in getting HandleRestoreCheckPoints src ms",src,ms)
