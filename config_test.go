@@ -71,7 +71,7 @@ func getVbuckets(c *config.Context) ([][]int, [][]int){
 
 func getContext() *config.Config {
     Servers := []string{"1.1.1.1", "2.2.2.2", "3.3.3.3"}
-    Sip := []string{"4.4.4.4","5.5.5.5"}
+    Sip := []string{"4.4.4.4","5.5.5.5", "6.6.6.6"}
     c := &config.Config{11111, 32, 1, "CRC", 70, Servers, Sip}
     return c
 }
@@ -87,7 +87,11 @@ func Test_HandleServerDown(t *testing.T) {
     c := getContext()
     ct := config.NewContext()
     ct.GenMap("test", c)
-    ct.HandleServerDown("1.1.1.1")
+    _, mp := ct.HandleServerDown([]string{"1.1.1.1"})
+    for val := range ct.S {
+        log.Println(ct.S[val].ReplicaVbuckets)
+    }
+    log.Println("push config is", mp)
 }
 /*
 func Test_HandleDeadVbuckets(t *testing.T) {
@@ -111,7 +115,7 @@ func Test_NeedRebalance(t *testing.T) {
     c := getContext()
     cp := config.NewContext()
     cp.GenMap("test", c)
-    cp.HandleServerDown("1.1.1.1")
+    cp.HandleServerDown([]string{"1.1.1.1"})
     verifyMap(cp, t)
     cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, "5.5.5.5")
     cp.S = append(cp.S, config.ServerInfo{})

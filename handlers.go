@@ -53,7 +53,7 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
         str := []string{dvi.Server}
 		ok, mp := cp.HandleDeadVbuckets(args, str, false, nil, true)
 		if ok {
-			server.PushNewConfig(co, mp, true)
+			server.PushNewConfig(co, mp, true, cp)
 		}
 	}
 }
@@ -80,7 +80,7 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
         //TODO:Need to fix here
 		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
-			server.PushNewConfig(co, mp, true)
+			server.PushNewConfig(co, mp, true, cfgctx)
 		}
 	}
 }
@@ -112,7 +112,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
         //TODO:Need to fix here
 		ok, mp := cfgctx.HandleReshardDown(si.Server, si.Capacity)
 		if ok {
-			server.PushNewConfig(co, mp, true)
+			server.PushNewConfig(co, mp, true, cfgctx)
 		}
 	}
 }
@@ -146,7 +146,7 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
         cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
 		ok, mp := cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
 		if ok {
-			server.PushNewConfig(co, mp, true)
+			server.PushNewConfig(co, mp, true, cfgctx)
 		}
 	}
 }
@@ -166,6 +166,28 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 		cfgctx.HandleCapacityUpdate(si)
 	}
 }
+
+func HandleReshardStatus(c *goweb.Context, cls *config.Cluster) {
+    status := cls.GetReshardStatus()
+    c.WriteResponse(status, 200)
+}
+
+/*
+func HandleCapacityInfo(c *goweb.Context, cls *config.Cluster) {
+	if c.IsPost() || c.IsPut() {
+    var si config.CapacityUpdateInfo
+		if err := c.Fill(&si); err != nil {
+			log.Println("got error", err)
+			return
+		}
+		cfgctx := cls.GetContext(si.Server)
+		if cfgctx == nil {
+			log.Println("Context not found for", si.Server)
+			return
+		}
+		cfgctx.HandleCapacityInfo(si)
+    }
+}*/
 
 func SetupHandlers(cls *config.Cluster, co *server.Client) {
 	goweb.MapFunc("/{cluster}/uploadConfig", func(c *goweb.Context) {
@@ -195,4 +217,13 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
 	goweb.MapFunc("/{cluster}/capacityUpdate", func(c *goweb.Context) {
 		HandleCapacityUpdate(c, cls)
 	})
+
+	goweb.MapFunc("/{cluster}/reshardStatus", func(c *goweb.Context) {
+		HandleReshardStatus(c, cls)
+	})
+
+    /*
+    goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
+		HandleCapacityInfo(c, cls)
+	}))*/
 }

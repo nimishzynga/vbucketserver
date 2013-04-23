@@ -12,6 +12,8 @@ const (
     RESHARD_CONT = 1
     RESHARD_DONE = 0
     MAX_FAIL_TIME = 30
+    RESHARD_CONT_STR = "In progress"
+    RESHARD_DONE_STR = "No resharding"
 )
 
 //return the secondary ip given any ip
@@ -578,7 +580,8 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
                 vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][k]
                 serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], allFailedIndex, allNewIndex)
                 vbucketMa[dvi.Active[i]][k] = REPLICA_RESTORE
-                cp.S[serverIndex].ReplicaVbuckets = append(cp.S[serverIndex].ReplicaVbuckets, dvi.Active[i])
+                cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets =
+                    append(cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets, dvi.Active[i])
                 vbucket = vbucketMa[dvi.Active[i]]
                 replicaEntry := VbaEntry{Source:serverList[serverIndex],}
                 for k:=1; k < len(vbucket); k++ {
@@ -624,8 +627,10 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
                             continue
                         }
                         vbucketMa[dvi.Replica[i]][j] = REPLICA_RESTORE
-                        cp.S[serverIndex].ReplicaVbuckets = append(cp.S[serverIndex].ReplicaVbuckets, dvi.Replica[i])
+                        cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets =
+                            append(cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets, dvi.Replica[i])
                         replicaEntry := VbaEntry{Source:serverList[serverIndex],}
+                        changeVbaMap[serverList[serverIndex]] = replicaEntry
                         log.Println("j is, new server is", j, serverIndex)
                         key := serverList[vbucket[0]]
                         oldEntry, ok := oldVbaMap[key]
@@ -885,6 +890,13 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
     return serverToInfo
 }
 
+/*
+func (cp *Context) HandleCapacityUpdate() map[string]int {
+    for ser := 
+
+}
+*/
+
 func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[string]VbaEntry {
     //transfer is complete, so put the change in actual map and send the new config 
     cp := cls.GetContext(ip)
@@ -947,7 +959,12 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[str
 }
 
 func sameMap(a,b [][]int) bool {
-    return false
+    for i := range a {
+        if a[i][0] != b[i][0] {
+            return false
+        }
+    }
+    return true
 }
 
 func (cls *Cluster) GetContext(ip string) *Context {
@@ -996,4 +1013,14 @@ func (cls *Cluster) SetReshard() bool {
     }
     cls.State = RESHARD_CONT
     return true
+}
+
+func (cls *Cluster) GetReshardStatus() string {
+    switch cls.State {
+    case RESHARD_CONT:
+        return RESHARD_CONT_STR
+    case RESHARD_DONE:
+        return RESHARD_DONE_STR
+    }
+    return RESHARD_DONE_STR
 }

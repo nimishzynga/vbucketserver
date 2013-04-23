@@ -124,7 +124,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 	cp.S[index] = si
 
     if ok, mp := cp.NeedRebalance(index); ok {
-        PushNewConfig(co, mp, true)
+        PushNewConfig(co, mp, true, cp)
         return true
     }
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, ip); err == nil {
@@ -152,7 +152,7 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 	    }
         log.Println("got ok from", getIpAddr(vc.conn))
         ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-        go PushNewConfigToVBA(co, ip)
+        go PushNewConfigToVBA(co, ip, cp)
 		return true
 	}
     if m.Status == MSG_ERROR_STR {
@@ -176,7 +176,7 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 	}
     ok, mp := cp.HandleServerDown([]string{m.Destination})
     if ok {
-        PushNewConfig(co, mp, true)
+        PushNewConfig(co, mp, true, cp)
     }
 	return true
 }
@@ -196,7 +196,7 @@ func (vc *VbaClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Cli
     str := []string{dvi.Server}
     ok, mp := cp.HandleDeadVbuckets(args, str, false, nil, true)
     if ok {
-        PushNewConfig(co, mp, true)
+        PushNewConfig(co, mp, true, cp)
     }
 	return true
 }
@@ -208,9 +208,14 @@ func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bo
 	}
     if m.Cmd == MSG_TRANSFER_STR {
         log.Println("calling HandleTransferDone")
+        cp := cls.GetContext(getIpAddr(vc.conn))
+        if cp == nil {
+            log.Println("Not able to find context for", getIpAddr(vc.conn))
+            return false
+        }
         changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
         //push config only to VBA
-        go PushNewConfig(co, changeMap, false)
+        go PushNewConfig(co, changeMap, false, cp)
         return true
     }
     if m.Status == MSG_ERROR_STR {

@@ -20,7 +20,6 @@ type Cluster struct {
 	IpMap      map[string]string   //ip addess to cluster name
     State      int
 	M          sync.RWMutex
-    state      int
 }
 
 type Config struct {

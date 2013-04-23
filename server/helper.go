@@ -75,6 +75,7 @@ func validateConfig(cls *config.Cluster) error {
 
 //return the message structure for a message type
 func getMsg(t int, args ...interface{}) ([]byte, error) {
+    log.Println("command type is", t)
 	return func(args []interface{}) ([]byte, error) {
 		switch t {
 		case MSG_INIT:
@@ -147,6 +148,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
                         cp.S[index] = replicas
 					}
 				}
+                log.Println("getMsg : config is ",m,ip)
 				return json.Marshal(m)
 			}
 		}
@@ -198,9 +200,10 @@ func getIpFromConfig(cp *config.Context, sr string) string {
 }
 
 //push the config to a VBA
-func PushNewConfigToVBA(co *Client, ipl map[string]int) {
+func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
     co.Vba.Mu.Lock()
     for ip := range ipl {
+        ip = cp.GetPrimaryIp(ip)
         ip = strings.Split(ip, ":")[0]
         if val, ok := co.Vba.Ma[ip]; ok {
             val.C <- CHN_NOTIFY_STR
@@ -210,20 +213,29 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int) {
 }
 
 //push the config to all the VBA's and Moxi
-func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool) {
+func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *config.Context) {
     log.Println("In pushnewconfig")
 	ma := make(map[string]int)
 	for _, en := range m {
-		if len(en.VbId) > 0 {
+		if len(en.VbId) >= 0 {
+            log.Println("before notifying",en.Source)
 			co.Vba.Mu.Lock()
-			ip := strings.Split(en.Source, ":")[0]
+            ip := cp.GetPrimaryIp(en.Source)
+            if ip == "" {
+                log.Fatal("ip is null", en.Source)
+            }
+			ip = strings.Split(ip, ":")[0]
+            log.Println("before1 notifying", ip)
 			if _, o := ma[ip]; o == false {
 				if val, ok := co.Vba.Ma[ip]; ok {
+                    log.Println("notifying",ip)
 					val.C <- CHN_NOTIFY_STR
 				}
 				ma[ip] = 1
 			}
 			co.Vba.Mu.Unlock()
+            log.Println("notified ips", ma)
+            log.Println("conn map is", co.Vba.Ma)
 		}
 	}
     if toMoxi == true {

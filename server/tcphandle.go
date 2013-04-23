@@ -45,7 +45,7 @@ const (
 const (
 	RECV_BUF_LEN   = 1024
 	HEADER_SIZE    = 4
-	HBTIME         = 30
+	HBTIME         = 200
 	MAX_TIMEOUT    = 3
 	VBA_WAIT_TIME  = 30
 	CHN_NOTIFY_STR = "NOTIFY"
@@ -181,7 +181,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			} else if info == CHN_CLOSE_STR {
 				return
 			}
-		case <-time.After(HBTIME * time.Second):
+		case <-time.After((HBTIME+5) * time.Second):
 			currTimeouts++
 			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
 				return
@@ -233,7 +233,10 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 
 			switch ret := handleMsg(m, conn, &state, c, co, cls, c3, vc); ret {
 			case STATUS_ERR:
-				return
+                log.Println("handleMsg returned error")
+				hasData = false
+				m = nil
+                //return
 			case STATUS_SUCCESS:
 				hasData = false
 				m = nil
@@ -265,8 +268,9 @@ func getClient(ct string, conn net.Conn, ch chan []byte) VbsClient {
 
 func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 cls *config.Cluster, i chan string, vc VbsClient) int {
+    log.Println("in handleMsg state", *s)
     if m != nil {
-        log.Println("in handleMsg msg state",*m,*s)
+        log.Println("in handleMsg msg",*m)
         if vc != nil {
             if m.Cmd == MSG_FAIL_STR {
                 vc.HandleFail(m, cls, co)
