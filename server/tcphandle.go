@@ -184,6 +184,9 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 		case <-time.After((HBTIME+5) * time.Second):
 			currTimeouts++
 			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
+                if state != STATE_ALIVE {
+                    log.Println("STATE_ALIVE state is", state, currTimeouts)
+                }
 				return
 			}
 			log.Println("timeout on socket", getIpAddr(conn))

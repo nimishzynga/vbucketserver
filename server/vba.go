@@ -218,6 +218,18 @@ func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bo
         go PushNewConfig(co, changeMap, false, cp)
         return true
     }
+	if m.Status == MSG_OK_STR {
+        cp := cls.GetContext(getIpAddr(vc.conn))
+        log.Println("before contxt got ok from", getIpAddr(vc.conn))
+	    if cp == nil {
+		    log.Println("Not able to find context for", getIpAddr(vc.conn))
+		    return false
+	    }
+        log.Println("got ok from", getIpAddr(vc.conn))
+        ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
+        go PushNewConfigToVBA(co, ip, cp)
+		return true
+	}
     if m.Status == MSG_ERROR_STR {
         log.Println("VBA ERROR:", m.Detail)
         /*dont disconnect VBA if error comes*/

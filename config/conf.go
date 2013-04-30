@@ -603,21 +603,35 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
             //handle the replica part
             for i := 0; i < len(dvi.Replica); i++ {
                 vbucket := vbucketMa[dvi.Replica[i]]
-                key := serverList[vbucket[0]] + serverList[ser]
-                oldEntry := oldVbaMap[key]
-                //delete the replica vbucket from the vba map
-                for r := 0; r < len(oldEntry.VbId); r++ {
-                    if oldEntry.VbId[r] == dvi.Replica[i] {
-                        oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-                        if len(oldEntry.VbId) == 0 {
-                            delete(oldVbaMap, key)
-                        } else {
-                            changeVbaMap[key] = oldEntry
-                            oldVbaMap[key] = oldEntry
+                in := ser
+                for l:=0; l < 2; l++ {
+                    found := false
+                    key := serverList[vbucket[0]] + serverList[in]
+                    oldEntry := oldVbaMap[key]
+                    //delete the replica vbucket from the vba map
+                    for r := 0; r < len(oldEntry.VbId); r++ {
+                        if oldEntry.VbId[r] == dvi.Replica[i] {
+                            oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+                            if len(oldEntry.VbId) == 0 {
+                                delete(oldVbaMap, key)
+                            } else {
+                                changeVbaMap[key] = oldEntry
+                                oldVbaMap[key] = oldEntry
+                            }
+                            found = true
+                            break
                         }
+                    }
+                    if found {
                         break
                     }
+                    if pin := cp.getSecondaryIndex(in);in == pin {
+                        break
+                    } else {
+                        in = pin
+                    }
                 }
+
                 var j int
                 for j = 0; j < len(vbucket); j++ {
                     if cp.SameServer(vbucket[j], ser) {
@@ -872,8 +886,26 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
             log.Println("Error in getting HandleRestoreCheckPoints src ms",src,ms)
             return nil
         }
-        key := serverList[ms] + serverList[src]
+        key := serverList[ms]
+        oldVbaMap := cp.VbaInfo
         oldEntry,ok := cp.VbaInfo[key]
+        if ok {
+            for r := 0; r < len(oldEntry.VbId); r++ {
+                if oldEntry.VbId[r] == vb {
+                    oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+                }
+            }
+            if len(oldEntry.VbId) == 0 {
+                delete(oldVbaMap, key)
+            } else {
+                oldVbaMap[key] = oldEntry
+            }
+        } else {
+            log.Println("key did not find in the server", key)
+        }
+
+        key = serverList[ms] + serverList[src]
+        oldEntry,ok = cp.VbaInfo[key]
         if ok == false {
             oldEntry.Source = serverList[ms]
             oldEntry.Destination = serverList[src]
@@ -888,6 +920,7 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
 	cp.M.Unlock()
     log.Println("returing the serverinfo", serverToInfo)
     return serverToInfo
+    //return nil
 }
 
 /*
