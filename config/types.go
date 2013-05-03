@@ -11,6 +11,7 @@ type ServerInfo struct {
 	MaxVbuckets     uint32
 	NumberOfDisk    int16
     ReplicaVbuckets []int
+    ActiveVbuckets  []int
     ckPointMap      map[int]int
 }
 
@@ -105,6 +106,7 @@ type Context struct {
     FailedNodes     map[string]int
     Maxvbuckets     uint32
     Rebalance       bool
+    NotifyServers   map[string]int
     T               time.Time
     Cbi             *callBackInfo
 	M               sync.RWMutex

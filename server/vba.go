@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"vbucketserver/config"
+    "time"
 )
 
 type GenericClient struct {
@@ -152,7 +153,25 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 	    }
         log.Println("got ok from", getIpAddr(vc.conn))
         ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-        go PushNewConfigToVBA(co, ip, cp)
+        log.Println("ip list is", ip)
+        if ip != nil {
+            log.Println("ip list is 2", ip)
+            if cp.NotifyServers == nil {
+                log.Println("it is here")
+                cp.NotifyServers = make(map[string]int)
+                log.Println("notify map is", cp.NotifyServers)
+                addMap(cp.NotifyServers, ip)
+                log.Println("notify map is after", cp.NotifyServers)
+                go func() {
+                    time.Sleep(AGGREGATE_TIME * time.Second)
+                    PushNewConfigToVBA(co, cp.NotifyServers, cp)
+                    log.Println("came up from sleep")
+                    cp.NotifyServers = nil
+                }()
+            } else {
+                addMap(cp.NotifyServers, ip)
+            }
+        }
 		return true
 	}
     if m.Status == MSG_ERROR_STR {
@@ -201,6 +220,12 @@ func (vc *VbaClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Cli
 	return true
 }
 
+func addMap(a,b map[string]int) {
+    for data,_ := range b {
+        a[data]=1
+    }
+}
+
 func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bool {
     log.Println("inside handleAlive")
     if m.Cmd == MSG_ALIVE_STR {
@@ -227,7 +252,22 @@ func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bo
 	    }
         log.Println("got ok from", getIpAddr(vc.conn))
         ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-        go PushNewConfigToVBA(co, ip, cp)
+        if ip != nil {
+            if cp.NotifyServers == nil {
+                log.Println("in side okkk")
+                cp.NotifyServers = make(map[string]int)
+                addMap(cp.NotifyServers, ip)
+                log.Println("notify map is", cp.NotifyServers)
+                go func() {
+                    time.Sleep(AGGREGATE_TIME * time.Second)
+                    log.Println("came up from sleep")
+                    PushNewConfigToVBA(co, cp.NotifyServers, cp)
+                    cp.NotifyServers = nil
+                }()
+            } else {
+                addMap(cp.NotifyServers, ip)
+            }
+        }
 		return true
 	}
     if m.Status == MSG_ERROR_STR {
