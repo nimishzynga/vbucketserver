@@ -96,6 +96,11 @@ type callBackInfo struct {
     cb      func(interface{}) interface{}
 }
 
+type FailureInfo struct {
+    F []FailureEntry
+    M sync.RWMutex
+}
+
 //Have a map for ips here.
 type Context struct {
 	C               Config       //input Config
@@ -107,9 +112,18 @@ type Context struct {
     Maxvbuckets     uint32
     Rebalance       bool
     NotifyServers   map[string]int
+    NodeFi          FailureInfo
+    RepFi           FailureInfo
     T               time.Time
     Cbi             *callBackInfo
 	M               sync.RWMutex
+}
+
+type FailureEntry struct {
+    Src            string
+    Dst            string
+    what           int
+    vb             Vblist
 }
 
 func NewContext() *Context {

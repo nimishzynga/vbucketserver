@@ -39,6 +39,7 @@ const (
     MSG_ERROR_STR  = "ERROR"
     MSG_TRANSFER_STR = "TRANSFER_DONE"
     MSG_CKPOINT_STR = "CKPOINT"
+    MSG_REP_FAIL_STR = "REPLICATION_FAIL"
 )
 
 //other constants
@@ -56,6 +57,7 @@ const (
 	CLIENT_UNKNOWN = "Unknown"
 	CLIENT_PCNT    = 10
     AGGREGATE_TIME  = 30
+	FAILOVER_TIME    = 30
 )
 
 //return status
@@ -276,7 +278,7 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
     if m != nil {
         log.Println("in handleMsg msg",*m)
         if vc != nil {
-            if m.Cmd == MSG_FAIL_STR {
+            if m.Cmd == MSG_FAIL_STR || m.Cmd == MSG_REP_FAIL_STR {
                 vc.HandleFail(m, cls, co)
                 return STATUS_SUCCESS
             } else if m.Cmd == MSG_CKPOINT_STR {
@@ -285,6 +287,11 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
             } else if m.Cmd == MSG_DEAD_VB_STR {
                 vc.HandleDeadvBuckets(m, cls, co)
                 return STATUS_SUCCESS
+            } else if m.Cmd == MSG_ALIVE_STR {
+               if vc.HandleAlive(cls, co, m) == false {
+                return STATUS_ERR
+                }
+                return STATUS_SUCCESS
             }
         }
     }
@@ -292,26 +299,17 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
     case STATE_INIT_RES:
         vc.HandleInit(i, cls, co, m.Capacity)
         *s = STATE_CONFIG_RES
-        break;
 
     case STATE_CONFIG_RES:
-        if vc.HandleOk(cls, co, m) {
-            *s = STATE_ALIVE
-        }
-        break;
-
-    case STATE_ALIVE:
-        if vc.HandleAlive(cls, co, m) == false {
+        if vc.HandleOk(cls, co, m) == false {
             return STATUS_ERR
         }
-        break;
 
     case STATE_UPDATE_CONFIG:
         if vc.HandleUpdateConfig(cls) == false {
             return STATUS_ERR
         }
         *s = STATE_CONFIG_RES
-        break;
     }
     return STATUS_SUCCESS
 }

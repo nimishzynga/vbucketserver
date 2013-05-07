@@ -168,6 +168,7 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 		serverList := cfg.Servers
 		checkVBAs(&cfg, co.Vba)
 		cp := config.NewContext()
+        go checkServerDown(cp, co)  //routine to handle the dead servers
 		cp.GenMap(key, &cfg)
 		cp.C.Servers = serverList
 		cls.ContextMap[key] = cp
@@ -175,6 +176,19 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 	cls.M.Unlock()
 	co.Started = true
 	co.Cond.Broadcast()
+}
+
+func checkServerDown(cp *config.Context, co *Client) {
+	//lastNodeFailed := []string{}
+	for {
+		select {
+		case <-time.After(FAILOVER_TIME * time.Second):
+            ok, mp := cp.HandleDown()
+            if ok {
+                PushNewConfig(co, mp, true, cp)
+            }
+        }
+    }
 }
 
 func getServerIndex(cp *config.Context, sr string) int {

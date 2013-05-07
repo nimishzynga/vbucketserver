@@ -174,6 +174,18 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
         }
 		return true
 	}
+    if m.Cmd == MSG_TRANSFER_STR {
+        log.Println("calling HandleTransferDone")
+        cp := cls.GetContext(getIpAddr(vc.conn))
+        if cp == nil {
+            log.Println("Not able to find context for", getIpAddr(vc.conn))
+            return false
+        }
+        changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
+        //push config only to VBA
+        go PushNewConfig(co, changeMap, false, cp)
+        return true
+    }
     if m.Status == MSG_ERROR_STR {
         log.Println("VBA ERROR:", m.Detail)
         //nuke the bastard
@@ -186,17 +198,26 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 }
 
 func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
-    return true
 	log.Println("inside handleFail")
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
 		log.Println("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
-    ok, mp := cp.HandleServerDown([]string{m.Destination})
-    if ok {
-        PushNewConfig(co, mp, true, cp)
+    fi := config.FailureInfo{}
+    if m.Cmd == MSG_FAIL_STR {
+        fi = cp.NodeFi
+    } else {
+        fi = cp.RepFi
     }
+    fi.M.Lock()
+    entry := config.FailureEntry{
+        Src : getIpAddr(vc.conn),
+        Dst : m.Destination,
+    }
+    fi.F = append(fi.F, entry)
+    log.Println("Added the failed node entry", entry)
+    fi.M.Unlock()
 	return true
 }
 
@@ -231,50 +252,6 @@ func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bo
     if m.Cmd == MSG_ALIVE_STR {
 		return true
 	}
-    if m.Cmd == MSG_TRANSFER_STR {
-        log.Println("calling HandleTransferDone")
-        cp := cls.GetContext(getIpAddr(vc.conn))
-        if cp == nil {
-            log.Println("Not able to find context for", getIpAddr(vc.conn))
-            return false
-        }
-        changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
-        //push config only to VBA
-        go PushNewConfig(co, changeMap, false, cp)
-        return true
-    }
-	if m.Status == MSG_OK_STR {
-        cp := cls.GetContext(getIpAddr(vc.conn))
-        log.Println("before contxt got ok from", getIpAddr(vc.conn))
-	    if cp == nil {
-		    log.Println("Not able to find context for", getIpAddr(vc.conn))
-		    return false
-	    }
-        log.Println("got ok from", getIpAddr(vc.conn))
-        ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-        if ip != nil {
-            if cp.NotifyServers == nil {
-                log.Println("in side okkk")
-                cp.NotifyServers = make(map[string]int)
-                addMap(cp.NotifyServers, ip)
-                log.Println("notify map is", cp.NotifyServers)
-                go func() {
-                    time.Sleep(AGGREGATE_TIME * time.Second)
-                    log.Println("came up from sleep")
-                    PushNewConfigToVBA(co, cp.NotifyServers, cp)
-                    cp.NotifyServers = nil
-                }()
-            } else {
-                addMap(cp.NotifyServers, ip)
-            }
-        }
-		return true
-	}
-    if m.Status == MSG_ERROR_STR {
-        log.Println("VBA ERROR:", m.Detail)
-        /*dont disconnect VBA if error comes*/
-        return true
-    }
 	return false
 }
 

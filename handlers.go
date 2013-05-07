@@ -30,7 +30,7 @@ func HandleVbucketMap(c *goweb.Context, cls *config.Cluster) {
 	data := server.ClusterVbucketMap{}
 	for _, cp := range cls.ContextMap {
 		cp.M.RLock()
-        data.Buckets = append(data.Buckets, cp.V)
+		data.Buckets = append(data.Buckets, cp.V)
 		cp.M.RUnlock()
 	}
 	c.WriteResponse(data, 200)
@@ -49,8 +49,8 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 			log.Println("Context not found for", dvi.Server)
 			return
 		}
-        args := []config.DeadVbucketInfo{dvi}
-        str := []string{dvi.Server}
+		args := []config.DeadVbucketInfo{dvi}
+		str := []string{dvi.Server}
 		ok, mp := cp.HandleDeadVbuckets(args, str, false, nil, true)
 		if ok {
 			server.PushNewConfig(co, mp, true, cp)
@@ -70,14 +70,14 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 			log.Println("server is null")
 			return
 		}
-        //TODO:Need to fix here.Assuming all server belongs to same cluster
+		//TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
 			log.Println("Context not found for", si.Server)
 			return
 		}
 		log.Println("downserver is", si.Server)
-        //TODO:Need to fix here
+		//TODO:Need to fix here
 		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
@@ -97,19 +97,19 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			log.Println("server is null")
 			return
 		}
-        if cls.SetReshard() == false {
-            data := "Reshard is already going on.Please try later"
-	        c.WriteResponse(data, 200)
-            return
-        }
-        //TODO:Need to fix here.Assuming all server belongs to same cluster
+		if cls.SetReshard() == false {
+			data := "Reshard is already going on.Please try later"
+			c.WriteResponse(data, 200)
+			return
+		}
+		//TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
 			log.Println("Context not found for", si.Server)
 			return
 		}
 		log.Println("downserver is", si.Server)
-        //TODO:Need to fix here
+		//TODO:Need to fix here
 		ok, mp := cfgctx.HandleReshardDown(si.Server, si.Capacity)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
@@ -118,7 +118,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 }
 
 func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client) {
-    log.Println("Adding new server")
+	log.Println("Adding new server")
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
@@ -130,20 +130,20 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			log.Println("Context not found for", si.Server)
 			return
 		}
-        log.Println("got cluster name as", c.PathParams["cluster"])
-        for _, serv := range si.Server {
-            if serv == "" {
-                log.Println("Invalid server in server alive")
-                return
-            }
-            for _,s := range cfgctx.C.Servers {
-                if s == serv {
-                    log.Println("Server already in server alive")
-                    return
-                }
-            }
-        }
-        cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
+		log.Println("got cluster name as", c.PathParams["cluster"])
+		for _, serv := range si.Server {
+			if serv == "" {
+				log.Println("Invalid server in server alive")
+				return
+			}
+			for _, s := range cfgctx.C.Servers {
+				if s == serv {
+					log.Println("Server already in server alive")
+					return
+				}
+			}
+		}
+		cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
 		ok, mp := cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
@@ -168,8 +168,8 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 }
 
 func HandleReshardStatus(c *goweb.Context, cls *config.Cluster) {
-    status := cls.GetReshardStatus()
-    c.WriteResponse(status, 200)
+	status := cls.GetReshardStatus()
+	c.WriteResponse(status, 200)
 }
 
 /*
@@ -222,8 +222,8 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
 		HandleReshardStatus(c, cls)
 	})
 
-    /*
-    goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
-		HandleCapacityInfo(c, cls)
-	}))*/
+	/*
+		    goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
+				HandleCapacityInfo(c, cls)
+			}))*/
 }
