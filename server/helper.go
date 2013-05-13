@@ -6,7 +6,7 @@ import (
 	"errors"
 	"io/ioutil"
 	"log"
-	"net"
+    "vbucketserver/net"
 	"os"
 	"strings"
 	"time"
@@ -144,8 +144,8 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					replicas := cp.S[index]
 					if len(replicas.ReplicaVbuckets) > 0 {
 						m.RestoreCheckPoints = append(m.RestoreCheckPoints, replicas.ReplicaVbuckets...)
-						replicas.ReplicaVbuckets = replicas.ReplicaVbuckets[:0]
-                        cp.S[index] = replicas
+						//replicas.ReplicaVbuckets = replicas.ReplicaVbuckets[:0]
+                        //cp.S[index] = replicas
 					}
 				}
                 log.Println("getMsg : config is ",m,ip)
@@ -213,6 +213,27 @@ func getIpFromConfig(cp *config.Context, sr string) string {
 	return ""
 }
 
+func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
+    if cl.W != nil {
+        return
+    }
+    log.Println("in wait for config", getIpAddrWithPort(cl.Conn))
+    ch := make(chan string)
+    cl.W = ch
+    go func() {
+        select {
+        case _,ok := <-ch:
+            if ok == false {
+                return
+            }
+        case <-time.After((2*HBTIME+5) * time.Second):
+            log.Println("Unable to push config.so failing node", getIpAddrWithPort(cl.Conn))
+            cp.HandleServerDown([]string{getIpAddrWithPort(cl.Conn)})
+        }
+    }()
+    return
+}
+
 //push the config to a VBA
 func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
     co.Vba.Mu.Lock()
@@ -220,7 +241,15 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
         ip = cp.GetPrimaryIp(ip)
         ip = strings.Split(ip, ":")[0]
         if val, ok := co.Vba.Ma[ip]; ok {
-            val.C <- CHN_NOTIFY_STR
+            if val.C != nil {
+                val.C <- CHN_NOTIFY_STR
+                if val.W != nil {
+                    close(val.W)
+                    val.W = nil
+                }
+            } else {
+                (&val).WaitForPushConfig(cp)
+            }
         }
     }
     co.Vba.Mu.Unlock()
@@ -242,8 +271,16 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
             log.Println("before1 notifying", ip)
 			if _, o := ma[ip]; o == false {
 				if val, ok := co.Vba.Ma[ip]; ok {
-                    log.Println("notifying",ip)
-					val.C <- CHN_NOTIFY_STR
+                    if val.C != nil {
+                        log.Println("notifying",ip)
+					    val.C <- CHN_NOTIFY_STR
+                        if val.W != nil {
+                            close(val.W)
+                            val.W = nil
+                        }
+                    } else {
+                        (&val).WaitForPushConfig(cp)
+                    }
 				}
 				ma[ip] = 1
 			}
@@ -313,7 +350,9 @@ func Insert(c net.Conn, ch chan string, co *Client, a string) {
 			cf := &ClientInfo{C: ch, Conn: c}
 			co.Vba.Ma[ip] = cf
 		} else {
-			co.Vba.Ma[ip].C <- CHN_CLOSE_STR
+            if co.Vba.Ma[ip].C != nil {
+			    co.Vba.Ma[ip].C <- CHN_CLOSE_STR
+            }
 			co.Vba.Ma[ip].C = ch
 			co.Vba.Ma[ip].Conn = c
 		}
@@ -333,7 +372,7 @@ func RemoveConn(c net.Conn, co *Client, ct string) {
 	} else if ct == CLIENT_VBA {
 		co.Vba.Mu.Lock()
 		if val, ok := co.Vba.Ma[ip]; ok && val.Conn == c {
-			delete(co.Vba.Ma, ip)
+            val.C = nil
 		}
 		co.Vba.Mu.Unlock()
 	}

@@ -2,8 +2,8 @@ package server
 
 import (
 	"log"
-	"net"
 	"vbucketserver/config"
+    "vbucketserver/net"
     "time"
 )
 
@@ -154,13 +154,13 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
         log.Println("got ok from", getIpAddr(vc.conn))
         ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
         log.Println("ip list is", ip)
-        if ip != nil {
+        if len(ip) > 0 {
+            cp.InfoMutex.Lock()
             log.Println("ip list is 2", ip)
             if cp.NotifyServers == nil {
-                log.Println("it is here")
                 cp.NotifyServers = make(map[string]int)
                 log.Println("notify map is", cp.NotifyServers)
-                addMap(cp.NotifyServers, ip)
+                addMap(cp.NotifyServers, ip, cp)
                 log.Println("notify map is after", cp.NotifyServers)
                 go func() {
                     time.Sleep(AGGREGATE_TIME * time.Second)
@@ -169,8 +169,9 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
                     cp.NotifyServers = nil
                 }()
             } else {
-                addMap(cp.NotifyServers, ip)
+                addMap(cp.NotifyServers, ip, cp)
             }
+            cp.InfoMutex.Unlock()
         }
 		return true
 	}
@@ -204,11 +205,11 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 		log.Println("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
-    fi := config.FailureInfo{}
+    fi := &config.FailureInfo{}
     if m.Cmd == MSG_FAIL_STR {
-        fi = cp.NodeFi
+        fi = &cp.NodeFi
     } else {
-        fi = cp.RepFi
+        fi = &cp.RepFi
     }
     fi.M.Lock()
     entry := config.FailureEntry{
@@ -222,7 +223,6 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 }
 
 func (vc *VbaClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Client) bool {
-	log.Println("inside handleFail")
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
 		log.Println("Not able to find context for", getIpAddr(vc.conn))
@@ -241,14 +241,13 @@ func (vc *VbaClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Cli
 	return true
 }
 
-func addMap(a,b map[string]int) {
+func addMap(a,b map[string]int, cp *config.Context) {
     for data,_ := range b {
-        a[data]=1
+        a[cp.GetPrimaryIp(data)]=1
     }
 }
 
 func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bool {
-    log.Println("inside handleAlive")
     if m.Cmd == MSG_ALIVE_STR {
 		return true
 	}

@@ -116,7 +116,7 @@ type Context struct {
     RepFi           FailureInfo
     T               time.Time
     Cbi             *callBackInfo
-	M               sync.RWMutex
+	M,InfoMutex     sync.RWMutex
 }
 
 type FailureEntry struct {

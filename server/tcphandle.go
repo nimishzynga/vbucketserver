@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"log"
-	"net"
 	"os"
+net "vbucketserver/net"
 	"time"
 	"vbucketserver/config"
 )
@@ -46,7 +46,7 @@ const (
 const (
 	RECV_BUF_LEN   = 1024
 	HEADER_SIZE    = 4
-	HBTIME         = 200
+	HBTIME         = 30
 	MAX_TIMEOUT    = 3
 	VBA_WAIT_TIME  = 30
 	CHN_NOTIFY_STR = "NOTIFY"
@@ -80,15 +80,38 @@ type VbsClient interface {
 }
 
 func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
+    //parse the conf file
+	if ok := parseInitialConfig(confFile, cls); ok == false {
+		log.Println("Unable to parse the config")
+		return
+	}
 	listener, err := net.Listen("tcp", s)
 	if err != nil {
 		log.Println("error listening:", err.Error())
 		os.Exit(1)
 	}
-	//parse the conf file
+	//wait for VBA's to connect
+	go waitForVBAs(cls, VBA_WAIT_TIME, c)
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			log.Println("Error accept:", err.Error())
+			return
+		}
+		go handleConn(conn, c, cls)
+	}
+}
+
+func HandleTcpDebug(c *Client, cls *config.Cluster, s string, confFile string) {
+    //parse the conf file
 	if ok := parseInitialConfig(confFile, cls); ok == false {
 		log.Println("Unable to parse the config")
 		return
+	}
+	listener, err := net.ListenDebug("tcp", s)
+    if err != nil {
+		log.Println("error listening:", err.Error())
+		os.Exit(1)
 	}
 	//wait for VBA's to connect
 	go waitForVBAs(cls, VBA_WAIT_TIME, c)
@@ -138,12 +161,12 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
             cp := cls.GetContext(getIpAddr(conn))
             if cp == nil {
                 log.Println("Not able to find context for", getIpAddr(conn))
-            } else if si := getServerIndex(cp, getIpAddr(conn)); si == -1 {
-                log.Println("handleRead server not found", getIpAddr(conn))
-            } else {
+            }
+            /*
+            else if si := getServerIndex(cp, getIpAddr(conn)); si != -1 {
                 m := &RecvMsg{Server:cp.V.Smap.ServerList[si],}
                 vc.HandleFail(m, cls, co)
-            }
+            }*/
             RemoveConn(conn, co, vc.ClientType())
         }
         close(c)
@@ -186,10 +209,8 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			}
 		case <-time.After((HBTIME+5) * time.Second):
 			currTimeouts++
+			log.Println("timeout on socket", getIpAddr(conn))
 			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
-                if state != STATE_ALIVE {
-                    log.Println("STATE_ALIVE state is", state, currTimeouts)
-                }
 				return
 			}
 			log.Println("timeout on socket", getIpAddr(conn))
@@ -206,11 +227,9 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 						buf := bytes.NewBuffer(fullData)
 						binary.Read(buf, binary.BigEndian, &length)
 						if length > RECV_BUF_LEN {
-							log.Println("Data size is more", length)
+							log.Println("Data size is more", length, fullData)
 							return
-						} else {
-                            log.Println("got length", length)
-                        }
+						}
 						fullData = fullData[HEADER_SIZE:]
 						n -= HEADER_SIZE
 					} else {
@@ -255,7 +274,7 @@ func parseMsg(b []byte) (*RecvMsg, error) {
 	m := &RecvMsg{}
 	var err error
 	if err = json.Unmarshal(b, m); err != nil {
-		log.Println("error in unmarshalling")
+		log.Println("error in unmarshalling", err)
 	}
 	return m, err
 }
@@ -274,9 +293,7 @@ func getClient(ct string, conn net.Conn, ch chan []byte) VbsClient {
 
 func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
 cls *config.Cluster, i chan string, vc VbsClient) int {
-    log.Println("in handleMsg state", *s)
     if m != nil {
-        log.Println("in handleMsg msg",*m)
         if vc != nil {
             if m.Cmd == MSG_FAIL_STR || m.Cmd == MSG_REP_FAIL_STR {
                 vc.HandleFail(m, cls, co)

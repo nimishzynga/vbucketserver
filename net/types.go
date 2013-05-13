@@ -1,8 +1,7 @@
-package server
+package net
 
 import (
 	"sync"
-net "vbucketserver/net"
 	"vbucketserver/config"
 )
 
@@ -13,7 +12,6 @@ type ClientInfo struct {
 	C     chan string
 	W     chan string //wait channel
 	State int
-	Conn  net.Conn
 }
 
 //information for all the clients of a particular type

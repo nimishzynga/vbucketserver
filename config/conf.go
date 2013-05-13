@@ -341,6 +341,11 @@ func (cp *Context) checkFail(ser string) bool {
 	return false
 }
 
+func (cp *Context) getRestoreVBuckets(ip string) []int {
+    index := cp.getServerIndex(cp.GetPrimaryIp(ip))
+    return cp.S[index].ReplicaVbuckets
+}
+
 func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
 	dvil := make([]DeadVbucketInfo, len(ser))
@@ -350,6 +355,8 @@ func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 		       continue
 		   }*/
 		dvil[i] = *cp.getServerVbuckets(cp.getServerIndex(ser[i]))
+        restoreVbs := cp.getRestoreVBuckets(ser[i])
+        dvil[i].Replica = append(dvil[i].Replica, restoreVbs...)
 		dvil[i].Server = ser[i]
 	}
 	cp.M.Unlock()
@@ -489,7 +496,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 	for i := range dvil {
 		dvi := dvil[i]
 		s := dvil[i].Server
-		ser := cp.getServerIndex(s)
+		ser := cp.getServerIndex(cp.GetPrimaryIp(s))
 		if len(newServerList) == 0 {
 			allFailedIndex = []int{ser}
 		}
@@ -579,6 +586,10 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 				}
 				vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][k]
 				serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], allFailedIndex, allNewIndex)
+                if serverIndex == -1 {
+                    log.Println("Not enough capacity")
+                    continue
+                }
 				vbucketMa[dvi.Active[i]][k] = REPLICA_RESTORE
 				cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets =
 					append(cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets, dvi.Active[i])
@@ -602,11 +613,21 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 
 			//handle the replica part
 			for i := 0; i < len(dvi.Replica); i++ {
+                in := -1
+                if cp.UpdateRestoreVbuckets(s, dvi.Replica[i]) {
+                    in = ser
+                }
 				vbucket := vbucketMa[dvi.Replica[i]]
-				in := ser
-				for l := 0; l < 2; l++ {
+                count := 2
+				for l := 0; l < count; l++ {
 					found := false
-					key := serverList[vbucket[0]] + serverList[in]
+                    key := ""
+                    if in == -1 {
+					    key = serverList[vbucket[0]]
+                        count=1
+                    } else {
+					    key = serverList[vbucket[0]] + serverList[in]
+                    }
 					oldEntry := oldVbaMap[key]
 					//delete the replica vbucket from the vba map
 					for r := 0; r < len(oldEntry.VbId); r++ {
@@ -820,13 +841,15 @@ func (cp *Context) HandleCheckPoint(si string, v Vblist, c Vblist) bool {
 	if len(v.Active) != len(c.Active) || len(v.Replica) != len(c.Replica) {
 		return false
 	}
-	m := cp.S[cp.getServerIndex(si)].ckPointMap
-	for i, k := range v.Active {
-		m[k] = c.Active[i]
-	}
-	for i, k := range v.Replica {
-		m[k] = c.Replica[i]
-	}
+    if index := cp.getServerIndex(si); index != -1 {
+        m := cp.S[cp.getServerIndex(si)].ckPointMap
+        for i, k := range v.Active {
+            m[k] = c.Active[i]
+        }
+        for i, k := range v.Replica {
+            m[k] = c.Replica[i]
+        }
+    }
 	return true
 }
 
@@ -868,6 +891,20 @@ func (cp *Context) getMasterServer(vb int, s int) int {
 	return vbucket[0]
 }
 
+func (cp *Context) UpdateRestoreVbuckets(ip string, vb int) bool {
+    if index := cp.getServerIndex(cp.GetPrimaryIp(ip));index != -1 {
+        for i:=0; i < len(cp.S[index].ReplicaVbuckets); i++ {
+            v := cp.S[index].ReplicaVbuckets[i]
+            if v == vb {
+                cp.S[index].ReplicaVbuckets = append(cp.S[index].ReplicaVbuckets[:i],
+                    cp.S[index].ReplicaVbuckets[i+1:]...)
+                return true
+            }
+        }
+    }
+    return false
+}
+
 func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map[string]int {
 	cp.M.Lock()
 	serverList := cp.V.Smap.ServerList
@@ -880,6 +917,12 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
 		} else {
 			src = cp.getServerIndex(cp.GetSecondaryIp(ip))
 		}
+
+        if cp.UpdateRestoreVbuckets(ip, vb) == false {
+            log.Println("Restore vbucket: vbucket does not belong",vb,ip)
+            continue
+        }
+
 		//this is putting the vbucket in the map
 		ms := cp.getMasterServer(vb, src)
 		if src == -1 || ms == -1 {
@@ -926,13 +969,12 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
 //t type of the message
 //vb contains the list of the vbuckets which failed in replication fail
 func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
-    log.Println("Inside handledown")
-    fi := cp.NodeFi
+    fi := &cp.NodeFi
     fi.M.Lock()
     NodeFailed := cp.DecideServer(fi.F)
     fi.F = fi.F[:0]
     fi.M.Unlock()
-    fi = cp.RepFi
+    fi = &cp.RepFi
     fi.M.Lock()
     RepFailed := cp.DecideServer(fi.F)
     fi.F = fi.F[:0]
@@ -946,7 +988,7 @@ func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
                     return
                 }
             }
-            NewlyFailedNode = append(NewlyFailedNode, k)
+            NewlyFailedNode = append(NewlyFailedNode, g)
         }()
     }
     if len(NewlyFailedNode) > 0 {
