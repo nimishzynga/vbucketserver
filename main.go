@@ -14,7 +14,7 @@ import _ "net/http/pprof"
 func main() {
 	var addr = flag.String("addr", "0:14000", "Socket Listen Address - ip:port")
 	var cfg = flag.String("config", "/etc/sysconfig/vbucketserver", "Configuration file")
-    var debug = flag.String("debug", "false", "Debug Mode")
+    var debug = flag.String("debug", "false", "VBS unit testing mode")
 	flag.Parse()
 
 	goweb.ConfigureDefaultFormatters()

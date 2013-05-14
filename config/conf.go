@@ -565,9 +565,9 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					if len(oldEntry.VbId) == 0 {
 						delete(oldVbaMap, key)
 					} else {
-						changeVbaMap[key] = oldEntry
 						oldVbaMap[key] = oldEntry
 					}
+					changeVbaMap[key] = oldEntry
 				}
 				k := 1
 				for ; k < len(vbucket); k++ {
@@ -613,9 +613,9 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 
 			//handle the replica part
 			for i := 0; i < len(dvi.Replica); i++ {
-                in := -1
+                in := ser
                 if cp.UpdateRestoreVbuckets(s, dvi.Replica[i]) {
-                    in = ser
+                    in = -1
                 }
 				vbucket := vbucketMa[dvi.Replica[i]]
                 count := 2
@@ -1004,6 +1004,10 @@ func (cp *Context) DecideServer(f []FailureEntry) []string {
 	failCount := make(map[string]map[string]int)
 	for _, en := range f {
         ip := cp.GetPrimaryIp(en.Dst)
+        if ip == "" {
+            log.Println("Server to fail:Not found", en.Dst)
+            continue
+        }
         log.Println("primary ip in decide server is",ip)
         if failCount[ip] == nil {
             failCount[ip]= make(map[string]int)

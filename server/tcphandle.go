@@ -158,16 +158,14 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 		conn.Close()
 		log.Println("disconnecting client", getIpAddr(conn))
         if vc != nil {
-            cp := cls.GetContext(getIpAddr(conn))
-            if cp == nil {
-                log.Println("Not able to find context for", getIpAddr(conn))
+            var cp *config.Context = nil
+            if vc.ClientType() == CLIENT_VBA {
+                cp = cls.GetContext(getIpAddr(conn))
+                if cp == nil {
+                    log.Println("Not able to find context for", getIpAddr(conn))
+                }
             }
-            /*
-            else if si := getServerIndex(cp, getIpAddr(conn)); si != -1 {
-                m := &RecvMsg{Server:cp.V.Smap.ServerList[si],}
-                vc.HandleFail(m, cls, co)
-            }*/
-            RemoveConn(conn, co, vc.ClientType())
+            RemoveConn(conn, co, vc.ClientType(), cp)
         }
         close(c)
 	}()

@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
     "sync"
     "errors"
+    "vbucketserver/config"
 Net "net"
 )
 
@@ -92,6 +93,11 @@ func RpFail(ip string) *RecvMsg {
     return m
 }
 
+func Dead(a []int, r []int) *RecvMsg {
+    m := &RecvMsg{Cmd:"DEAD_VBUCKETS" , Vbuckets:config.Vblist{Active:a,},}
+    return m
+}
+
 func getIp(i int) string {
     return clientMap[i].ip
 }
@@ -124,6 +130,24 @@ func ReplicationFail() {
         })
 }
 
+func TestDiskFailure() {
+    register(2, "CONFIG", func() {
+        time.Sleep(5*time.Second)
+        c := getConn(1)
+        SendToClient(Dead(c.m.active[3:], nil), 1)
+    })
+}
+
+func TestAliveFail() {
+        register(1, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            c := getConn(1)
+            c.handleMyClose()
+            time.Sleep(20*time.Second)
+            createClient(CLIENT2)
+        })
+}
+
 func TestVbaDown() {
 }
 
@@ -145,7 +169,9 @@ func HandleDebug() {
     createClient(CLIENT4)
     createClient(CLIENT5)
     time.Sleep(3 *time.Second)
-    ReplicationFail()
+   // ReplicationFail()
+    //TestDiskFailure()
+    TestAliveFail()
 }
 
 func SendToClient(data *RecvMsg, i int) {
@@ -254,6 +280,9 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
     if m.Cmd == "INIT" {
         msg = &RecvMsg{Agent:"VBA",Capacity:3}
     } else if m.Cmd == MSG_CONFIG_STR {
+        for _,g := range m.Data {
+            c.m.active = append(c.m.active, g.VbId...)
+        }
         c.t = time.Duration(m.HeartBeatTime)
         msg = &RecvMsg{Status: MSG_OK_STR}
         if m.RestoreCheckPoints != nil {
@@ -274,6 +303,8 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
 
 type MetaData struct {
     state int
+    active []int
+    replica []int
 }
 
 type Conn Net.Conn
@@ -288,7 +319,7 @@ type MyConn struct {
 }
 
 func NewConn(w,r chan []byte, val string, i int) MyConn {
-    v := MyConn{w:w,r:r,ip:val, m:&MetaData{STATE_ALIVE}, index:i, t:HBTIME}
+    v := MyConn{w:w,r:r,ip:val, m:&MetaData{state:STATE_ALIVE}, index:i, t:HBTIME}
     return v
 }
 

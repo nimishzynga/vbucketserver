@@ -199,7 +199,6 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 }
 
 func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
-	log.Println("inside handleFail")
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
 		log.Println("Not able to find context for", getIpAddr(vc.conn))
@@ -211,8 +210,12 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
     } else {
         fi = &cp.RepFi
     }
+    if getServerIndex(cp, getIpAddr(vc.conn)) == -1 {
+        log.Println("invalid server reporting failure", getIpAddr(vc.conn))
+        return false
+    }
     fi.M.Lock()
-    entry := config.FailureEntry{
+    entry := config.FailureEntry {
         Src : getIpAddr(vc.conn),
         Dst : m.Destination,
     }

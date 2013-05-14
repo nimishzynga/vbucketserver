@@ -227,7 +227,7 @@ func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
                 return
             }
         case <-time.After((2*HBTIME+5) * time.Second):
-            log.Println("Unable to push config.so failing node", getIpAddrWithPort(cl.Conn))
+            log.Println("Unable to push config/timeing out.so failing node", getIpAddrWithPort(cl.Conn))
             cp.HandleServerDown([]string{getIpAddrWithPort(cl.Conn)})
         }
     }()
@@ -350,17 +350,22 @@ func Insert(c net.Conn, ch chan string, co *Client, a string) {
 			cf := &ClientInfo{C: ch, Conn: c}
 			co.Vba.Ma[ip] = cf
 		} else {
-            if co.Vba.Ma[ip].C != nil {
-			    co.Vba.Ma[ip].C <- CHN_CLOSE_STR
+            val := co.Vba.Ma[ip]
+            if val.C != nil {
+			    val.C <- CHN_CLOSE_STR
             }
-			co.Vba.Ma[ip].C = ch
-			co.Vba.Ma[ip].Conn = c
+			val.C = ch
+			val.Conn = c
+            if val.W != nil {
+                close(val.W)
+                val.W = nil
+            }
 		}
 		co.Vba.Mu.Unlock()
 	}
 }
 
-func RemoveConn(c net.Conn, co *Client, ct string) {
+func RemoveConn(c net.Conn, co *Client, ct string, cp *config.Context) {
 	/*XXX:close the older connection if exists*/
 	ip := getIpAddr(c)
 	if ct == CLIENT_MOXI {
@@ -373,6 +378,7 @@ func RemoveConn(c net.Conn, co *Client, ct string) {
 		co.Vba.Mu.Lock()
 		if val, ok := co.Vba.Ma[ip]; ok && val.Conn == c {
             val.C = nil
+            (&val).WaitForPushConfig(cp)
 		}
 		co.Vba.Mu.Unlock()
 	}
