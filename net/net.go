@@ -68,6 +68,7 @@ const (
     CLIENT3 = "127.0.0.3:11211"
     CLIENT4 = "127.0.0.4:11211"
     CLIENT5 = "127.0.0.5:11211"
+    CLIENT6 = "127.0.0.11:11211"
 )
 
 var debug bool
@@ -168,10 +169,11 @@ func HandleDebug() {
     createClient(CLIENT3)
     createClient(CLIENT4)
     createClient(CLIENT5)
+    createClient(CLIENT6)
     time.Sleep(3 *time.Second)
-   // ReplicationFail()
-    //TestDiskFailure()
-    TestAliveFail()
+    ReplicationFail()
+   //TestDiskFailure()
+   //TestAliveFail()
 }
 
 func SendToClient(data *RecvMsg, i int) {

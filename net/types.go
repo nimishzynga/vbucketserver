@@ -33,7 +33,7 @@ type RecvMsg struct {
 	Agent    string
 	Status   string
 	Server   string
-    Detail   string
+    Detail   []string
 	Vbuckets config.Vblist
 	Capacity int
     CheckPoints config.Vblist

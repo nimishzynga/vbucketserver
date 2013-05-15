@@ -265,7 +265,7 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
 			co.Vba.Mu.Lock()
             ip := cp.GetPrimaryIp(en.Source)
             if ip == "" {
-                log.Fatal("ip is null", en.Source)
+                continue
             }
 			ip = strings.Split(ip, ":")[0]
             log.Println("before1 notifying", ip)

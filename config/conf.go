@@ -189,7 +189,7 @@ func (cp *Context) parseIps(cfg *Config) int {
 	sec := 0
 	for i, _ := range cfg.Servers {
 		if len(cfg.SecondaryIps) > i && cfg.SecondaryIps[i] != "" {
-			cp.SecondaryIpMap[sec+len(cfg.Servers)] = count
+			cp.SecondaryIpMap[sec+len(cfg.Servers)+ start] = count
 			cp.SecondaryIpMap[count] = sec + start + len(cfg.Servers)
 			cp.V.Smap.ServerList = append(cp.V.Smap.ServerList, cfg.SecondaryIps[i])
 			sec++
@@ -312,6 +312,7 @@ func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	vbaMap := cp.V.Smap.VBucketMap
 	priIndex := cp.getPrimaryIndex(s)
 	secIndex := cp.getSecondaryIndex(s)
+    log.Println("inside getserverbucket", priIndex,secIndex)
 	dvi := new(DeadVbucketInfo)
 	for i := 0; i < len(vbaMap); i++ {
 		for j := 0; j < len(vbaMap[i]); j++ {
@@ -524,7 +525,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					if dvi.Replica[i] != d.Replica[j] {
 						j++
 						if j == len(d.Replica) {
-							log.Println("Invalid replica vbuckets")
+							log.Println("Invalid replica vbuckets", dvi.Replica, d.Replica)
 							return false, nil
 						}
 					} else {
