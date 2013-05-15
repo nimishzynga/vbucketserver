@@ -301,6 +301,7 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
         ff.c = ""
     }
     c.handleMyWrite(msg)
+    c.handleMyWrite(msg)
 }
 
 type MetaData struct {

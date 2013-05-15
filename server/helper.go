@@ -265,6 +265,7 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
 			co.Vba.Mu.Lock()
             ip := cp.GetPrimaryIp(en.Source)
             if ip == "" {
+			    co.Vba.Mu.Unlock()
                 continue
             }
 			ip = strings.Split(ip, ":")[0]
