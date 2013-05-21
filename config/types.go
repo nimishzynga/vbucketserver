@@ -101,6 +101,11 @@ type FailureInfo struct {
     M sync.RWMutex
 }
 
+type ReshardInfo struct {
+    status int
+    dvi *[]DeadVbucketInfo
+}
+
 //Have a map for ips here.
 type Context struct {
 	C               Config       //input Config
@@ -116,6 +121,7 @@ type Context struct {
     RepFi           FailureInfo
     T               time.Time
     Cbi             *callBackInfo
+    ReInfo          ReshardInfo
 	M,InfoMutex     sync.RWMutex
 }
 

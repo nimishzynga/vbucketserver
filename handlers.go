@@ -97,15 +97,15 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			log.Println("server is null")
 			return
 		}
-		if cls.SetReshard() == false {
-			data := "Reshard is already going on.Please try later"
-			c.WriteResponse(data, 200)
-			return
-		}
 		//TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
 			log.Println("Context not found for", si.Server)
+			return
+		}
+        if cfgctx.SetReshard() == false {
+			data := "Reshard is already going on.Please try later"
+			c.WriteResponse(data, 200)
 			return
 		}
 		log.Println("downserver is", si.Server)
@@ -143,6 +143,12 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 				}
 			}
 		}
+        if cfgctx.SetReshard() == false {
+			data := "Reshard is going on.Please try later"
+			c.WriteResponse(data, 200)
+			return
+		}
+
 		cls.AddIpToIpMap(si.Server, si.SecIp, c.PathParams["cluster"])
 		ok, mp := cfgctx.HandleServerAlive(si.Server, si.SecIp, true)
 		if ok {
@@ -168,7 +174,12 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 }
 
 func HandleReshardStatus(c *goweb.Context, cls *config.Cluster) {
-	status := cls.GetReshardStatus()
+	cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
+		if cfgctx == nil {
+            log.Println("HandleReshardStatus :Context not found")
+			return
+	    }
+	status := cfgctx.GetReshardStatus()
 	c.WriteResponse(status, 200)
 }
 

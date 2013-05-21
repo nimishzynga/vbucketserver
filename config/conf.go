@@ -50,6 +50,28 @@ func (cp *Context) GetPrimaryIp(ip string) string {
 	return ""
 }
 
+func (cp *Context) getTransferIndex(vb int) int {
+    for _,val := range *cp.ReInfo.dvi {
+        for _,v := range val.Active {
+            if v == vb {
+                return cp.getServerIndex(val.Server)
+            }
+        }
+    }
+    return -1
+}
+
+func (cp *Context) getRestoreIndex(vb int) int {
+    for _,val := range *cp.ReInfo.dvi {
+        for _,v := range val.Replica {
+            if v == vb {
+                return cp.getServerIndex(val.Server)
+            }
+        }
+    }
+    return -1
+}
+
 func (cp *Context) getPrimaryIndex(i int) int {
 	if index, ok := cp.SecondaryIpMap[i]; ok {
 		if index == -1 {
@@ -269,7 +291,7 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
 	log.Println("lastindex is", lastindex)
 	log.Println("arr is", arr)
 	//returnIndex = 0
-	for k := 0; k <= lastindex; k++ {
+	for k := 0; k < len(arr)-1; k++ {
 		// if cp.S[]
 		var j int32
 		if lastindex == 0 {
@@ -371,6 +393,9 @@ func (cp *Context) RemoveServerInfo(priIps []string, secIps []string) {
 }
 
 func (cp *Context) changeNewCapacity(capacity int) {
+    if capacity <= 0 {
+        return
+    }
 	totServers := len(cp.V.Smap.ServerList)
 	var cc uint32 = uint32(float32(uint32(cp.C.Replica+1)*uint32(cp.C.Vbuckets))*
 		(1+(float32(capacity)/100))) / uint32(totServers)
@@ -389,6 +414,7 @@ func (cp *Context) HandleReshardDown(ser []string, c int) (bool, map[string]VbaE
 		dvil[i].Active = dvil[i].Active[:0]
 		dvil[i].Server = serv
 	}
+    cp.ReInfo.dvi = &dvil
 	cp.RemoveServerInfo(ser, nil)
 	cp.changeNewCapacity(c)
 	cp.M.Unlock()
@@ -446,12 +472,26 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
 	log.Println("Inside HandleTransferVbuckets")
 	//transfer should be affected in FFT
 	oldVbaMap := cp.VbaInfo
-	vbucketMa := cp.V.Smap.VBucketMapForward
+	vbucketMa := cp.V.Smap.VBucketMap
 	serverList := cp.V.Smap.ServerList
 	for i := range dvi.Transfer {
 		log.Println("inside transfer for loop")
 		vbucket := vbucketMa[dvi.Transfer[i]]
-		ser := cp.findFreeServer(vbucket[0], allFailedIndex, allNewIndex)
+        //need to append for all replica
+        index := cp.getRestoreIndex(dvi.Transfer[i])
+        failedIndex := allFailedIndex
+        func() {
+            if index != -1 {
+                for j:=0;j<len(failedIndex);j++ {
+                    if failedIndex[j] == index {
+                        return
+                    }
+                }
+                failedIndex = append(failedIndex, index)
+                return
+            }
+        }()
+        ser := cp.findFreeServer(vbucket[1], failedIndex, allNewIndex)
 		//add the new transfer entry
 		log.Println("server index are", vbucket[0], ser, serverList)
 		key := serverList[vbucket[0]] + serverList[ser]
@@ -460,10 +500,10 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
 			oldEntry.Source = serverList[vbucket[0]]
 			oldEntry.Destination = serverList[ser]
 		}
-		vbucket[0] = ser
 		oldEntry.Transfer_VbId = append(oldEntry.Transfer_VbId, dvi.Transfer[i])
 		changeVbaMap[key] = oldEntry
 		oldVbaMap[key] = oldEntry
+        cp.V.Smap.VBucketMapForward[dvi.Transfer[i]][0] = ser
 	}
 }
 
@@ -658,8 +698,21 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 				for j = 0; j < len(vbucket); j++ {
 					if cp.SameServer(vbucket[j], ser) {
 						log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
-						serverIndex := cp.findFreeServer(vbucket[0], allFailedIndex, allNewIndex)
-						if serverIndex == -1 {
+                        index := cp.getTransferIndex(ser)
+                        failedIndex := allFailedIndex
+                        func() {
+                            if index != -1 {
+                                for j:=0;j<len(failedIndex);j++ {
+                                    if failedIndex[j] == index {
+                                        return
+                                    }
+                                }
+                                failedIndex = append(failedIndex, index)
+                                return
+                            }
+                        }()
+                        serverIndex := cp.findFreeServer(vbucket[0], failedIndex, allNewIndex)
+                        if serverIndex == -1 {
 							continue
 						}
 						vbucketMa[dvi.Replica[i]][j] = REPLICA_RESTORE
@@ -816,6 +869,7 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
 		si := cp.S[cp.getServerIndex(serv)]
 		si.currentVbuckets += uint32(totVbuckets)
 	}
+    cp.ReInfo.dvi = &dvil
 	if toAdd {
 		//TODO:Need to check if duplicate ip is getting added
 		cp.C.Servers = append(cp.C.Servers, ser...)
@@ -906,12 +960,12 @@ func (cp *Context) UpdateRestoreVbuckets(ip string, vb int) bool {
     return false
 }
 
-func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map[string]int {
+func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) map[string]int {
 	cp.M.Lock()
 	serverList := cp.V.Smap.ServerList
 	serverToInfo := make(map[string]int)
-	log.Println("inside HandleRestoreCheckPoints for ip", ip, vb.Replica)
-	for i, vb := range vb.Replica {
+	log.Println("inside HandleRestoreCheckPoints for ip", ip, vbl.Replica)
+	for i, vb := range vbl.Replica {
 		src := 0
 		if i%2 == 0 {
 			src = cp.getServerIndex(cp.GetPrimaryIp(ip))
@@ -961,6 +1015,7 @@ func (cp *Context) HandleRestoreCheckPoints(vb Vblist, ck Vblist, ip string) map
 		cp.VbaInfo[key] = oldEntry
 		serverToInfo[serverList[ms]] = 1
 	}
+    cp.updateReshardStatus(cp.getServerIndex(ip), vbl)
 	cp.M.Unlock()
 	log.Println("returing the serverinfo", serverToInfo)
 	return serverToInfo
@@ -1031,7 +1086,7 @@ func (cp *Context) HandleCapacityUpdate() map[string]int {
 }
 */
 
-func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[string]VbaEntry {
+func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[string]VbaEntry {
 	//transfer is complete, so put the change in actual map and send the new config 
 	cp := cls.GetContext(ip)
 	if cp == nil {
@@ -1048,48 +1103,117 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vb Vblist) map[str
 		return nil
 	}
 	oldVbaMap := cp.VbaInfo
-	for _, vb := range vb.Active {
+	for _, vb := range vbl.Active {
 		d := vbucketMaFwd[vb][0]
-		vbucket := vbucketMa[vb]
-		for k := 1; k < len(vbucket); k++ {
-			log.Println("in HandleTransferDone src, k", src, k)
-			if vbucket[k] < 0 {
-				log.Println("ha ha ha HandleTransferDone")
-				continue
-			}
-			key := serverList[src] + serverList[vbucket[k]]
-			oldEntry, _ := oldVbaMap[key]
-			for r := 0; r < len(oldEntry.VbId); r++ {
-				if oldEntry.VbId[r] == vb {
-					oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-					break
-				}
-			}
-			if len(oldEntry.VbId) == 0 {
-				delete(oldVbaMap, key)
-			} else {
-				changeVbaMap[key] = oldEntry
-				oldVbaMap[key] = oldEntry
-			}
-			for k := 1; k < len(vbucket); k++ {
-				key := serverList[d] + serverList[vbucket[k]]
-				oldEntry, ok := oldVbaMap[key]
-				if ok == false {
-					oldEntry.Source = serverList[d]
-					oldEntry.Destination = serverList[vbucket[k]]
-				}
-				oldEntry.VbId = append(oldEntry.VbId, vb)
-				changeVbaMap[key] = oldEntry
-				oldVbaMap[key] = oldEntry
-			}
-		}
-		vbucket[0] = d
-	}
-	if sameMap(vbucketMa, vbucketMaFwd) {
-		cp.copyVbucketMap()
-		cls.State = RESHARD_DONE
-	}
+        removeEntry := func (src int) bool {
+            log.Println("in HandleTransferDone src", src)
+            found := false
+            key := serverList[src] + serverList[d]
+            oldEntry, _ := oldVbaMap[key]
+            for r := 0; r < len(oldEntry.Transfer_VbId); r++ {
+                if oldEntry.Transfer_VbId[r] == vb {
+                    log.Println("vbucket found",vb)
+                    oldEntry.Transfer_VbId = append(oldEntry.Transfer_VbId[:r],
+                        oldEntry.Transfer_VbId[r+1:]...)
+                    found = true
+                    break
+                }
+            }
+            if found == false {
+                log.Println("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
+                return false
+            }
+            if len(oldEntry.VbId) == 0 {
+                delete(oldVbaMap, key)
+            } else {
+                oldVbaMap[key] = oldEntry
+            }
+            changeVbaMap[key] = oldEntry
+
+		    vbucket := vbucketMa[vb]
+            for k := 1; k < len(vbucket); k++ {
+                if vbucket[k] < 0 {
+                    log.Println("ha ha ha HandleTransferDone")
+                    break
+                }
+                key = serverList[src] + serverList[vbucket[k]]
+                oldEntry, _ = oldVbaMap[key]
+                for r := 0; r < len(oldEntry.VbId); r++ {
+                    if oldEntry.VbId[r] == vb {
+                        oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
+                        break
+                    }
+                }
+                if len(oldEntry.VbId) == 0 {
+                    delete(oldVbaMap, key)
+                } else {
+                    oldVbaMap[key] = oldEntry
+                }
+                changeVbaMap[key] = oldEntry
+
+                key := serverList[d] + serverList[vbucket[k]]
+                oldEntry, ok := oldVbaMap[key]
+                if ok == false {
+                    oldEntry.Source = serverList[d]
+                    oldEntry.Destination = serverList[vbucket[k]]
+                }
+                oldEntry.VbId = append(oldEntry.VbId, vb)
+                changeVbaMap[key] = oldEntry
+                oldVbaMap[key] = oldEntry
+                vbucketMa[vb][0] = d
+            }
+            return true
+        }
+        if removeEntry(src) == false {
+            removeEntry(cp.getSecondaryIndex(src))
+        }
+    }
+	cp.updateReshardStatus(src, vbl)
 	return changeVbaMap
+}
+
+func (cp *Context) GetReshardStatus() string {
+	switch cp.ReInfo.status {
+	case RESHARD_CONT:
+		return RESHARD_CONT_STR
+	case RESHARD_DONE:
+		return RESHARD_DONE_STR
+	}
+	return RESHARD_DONE_STR
+}
+
+func (cp *Context) updateReshardStatus(index int, list Vblist) {
+    if cp.ReInfo.status == RESHARD_DONE {
+        return
+    }
+    repCount := 0
+    actCount := 0
+    for _,val := range *cp.ReInfo.dvi {
+        in := cp.getServerIndex(val.Server)
+        if cp.SameServer(index, in) {
+            for _,vb := range list.Active {
+                for r,v := range val.Active {
+                    if v == vb {
+                        val.Active = append(val.Active[:r], val.Active[r+1:]...)
+                        break
+                    }
+                }
+            }
+            for _,vb := range list.Replica {
+                for r,v := range val.Replica {
+                    if v == vb {
+                        val.Replica = append(val.Replica[:r], val.Replica[r+1:]...)
+                        break
+                    }
+                }
+            }
+        }
+        //repCount += len(val.Replica)
+        actCount += len(val.Active)
+    }
+    if repCount + actCount == 0 {
+        cp.ReInfo.status = RESHARD_DONE
+    }
 }
 
 func sameMap(a, b [][]int) bool {
@@ -1100,6 +1224,15 @@ func sameMap(a, b [][]int) bool {
 	}
 	return true
 }
+
+func (cp *Context) SetReshard() bool {
+	if cp.ReInfo.status == RESHARD_CONT {
+		return false
+	}
+	cp.ReInfo.status = RESHARD_CONT
+	return true
+}
+
 
 func (cls *Cluster) GetContext(ip string) *Context {
 	ip = strings.Split(ip, ":")[0]
@@ -1141,20 +1274,4 @@ func (cls *Cluster) AddIpToIpMap(p []string, s []string, c string) {
 	}
 }
 
-func (cls *Cluster) SetReshard() bool {
-	if cls.State == RESHARD_CONT {
-		return false
-	}
-	cls.State = RESHARD_CONT
-	return true
-}
 
-func (cls *Cluster) GetReshardStatus() string {
-	switch cls.State {
-	case RESHARD_CONT:
-		return RESHARD_CONT_STR
-	case RESHARD_DONE:
-		return RESHARD_DONE_STR
-	}
-	return RESHARD_DONE_STR
-}

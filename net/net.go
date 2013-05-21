@@ -286,7 +286,7 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
             c.m.active = append(c.m.active, g.VbId...)
         }
         c.t = time.Duration(m.HeartBeatTime)
-        msg = &RecvMsg{Status: MSG_OK_STR}
+        msg = &RecvMsg{Status: MSG_OK_STR, Cmd: MSG_CONFIG_STR}
         if m.RestoreCheckPoints != nil {
             for _,v := range m.RestoreCheckPoints {
                 msg.Vbuckets.Replica = append(msg.Vbuckets.Replica, v)

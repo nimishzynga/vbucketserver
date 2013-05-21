@@ -144,48 +144,50 @@ func (vc *VbaClient) HandleUpdateConfig(cls *config.Cluster) bool {
 }
 
 func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool {
-	if m.Status == MSG_OK_STR {
-        cp := cls.GetContext(getIpAddr(vc.conn))
-        log.Println("before contxt got ok from", getIpAddr(vc.conn))
-	    if cp == nil {
-		    log.Println("Not able to find context for", getIpAddr(vc.conn))
-		    return false
-	    }
-        log.Println("got ok from", getIpAddr(vc.conn))
-        ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-        log.Println("ip list is", ip)
-        if len(ip) > 0 {
-            cp.InfoMutex.Lock()
-            log.Println("ip list is 2", ip)
-            if cp.NotifyServers == nil {
-                cp.NotifyServers = make(map[string]int)
-                log.Println("notify map is", cp.NotifyServers)
-                addMap(cp.NotifyServers, ip, cp)
-                log.Println("notify map is after", cp.NotifyServers)
-                go func() {
-                    time.Sleep(AGGREGATE_TIME * time.Second)
-                    PushNewConfigToVBA(co, cp.NotifyServers, cp)
-                    log.Println("came up from sleep")
-                    cp.NotifyServers = nil
-                }()
-            } else {
-                addMap(cp.NotifyServers, ip, cp)
+    if m.Status == MSG_OK_STR {
+        if m.Cmd == MSG_CONFIG_STR {
+            cp := cls.GetContext(getIpAddr(vc.conn))
+            log.Println("before contxt got ok from", getIpAddr(vc.conn))
+            if cp == nil {
+                log.Println("Not able to find context for", getIpAddr(vc.conn))
+                return false
             }
-            cp.InfoMutex.Unlock()
+            log.Println("got ok from", getIpAddr(vc.conn))
+            ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
+            log.Println("ip list is", ip)
+            if len(ip) > 0 {
+                cp.InfoMutex.Lock()
+                log.Println("ip list is 2", ip)
+                if cp.NotifyServers == nil {
+                    cp.NotifyServers = make(map[string]int)
+                    log.Println("notify map is", cp.NotifyServers)
+                    addMap(cp.NotifyServers, ip, cp)
+                    log.Println("notify map is after", cp.NotifyServers)
+                    go func() {
+                        time.Sleep(AGGREGATE_TIME * time.Second)
+                        PushNewConfigToVBA(co, cp.NotifyServers, cp)
+                        log.Println("came up from sleep")
+                        cp.NotifyServers = nil
+                    }()
+                } else {
+                    addMap(cp.NotifyServers, ip, cp)
+                }
+                cp.InfoMutex.Unlock()
+            }
+            return true
         }
-		return true
-	}
-    if m.Cmd == MSG_TRANSFER_STR {
-        log.Println("calling HandleTransferDone")
-        cp := cls.GetContext(getIpAddr(vc.conn))
-        if cp == nil {
-            log.Println("Not able to find context for", getIpAddr(vc.conn))
-            return false
+        if m.Cmd == MSG_TRANSFER_STR {
+            log.Println("calling HandleTransferDone")
+            cp := cls.GetContext(getIpAddr(vc.conn))
+            if cp == nil {
+                log.Println("Not able to find context for", getIpAddr(vc.conn))
+                return false
+            }
+            changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
+            //push config only to VBA
+            go PushNewConfig(co, changeMap, false, cp)
+            return true
         }
-        changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
-        //push config only to VBA
-        go PushNewConfig(co, changeMap, false, cp)
-        return true
     }
     if m.Status == MSG_ERROR_STR {
         log.Println("VBA ERROR:", m.Detail)
