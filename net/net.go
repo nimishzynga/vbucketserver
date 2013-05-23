@@ -112,13 +112,6 @@ func getConn(i int) (*MyConn) {
     return myMap[clientMap[i].ip]
 }
 
-func settimer(t time.duration, f func()) {
-    go func() {
-        time.sleep(t *time.Second)
-        f()
-    }()
-}
-
 func ReplicationFail() {
         register(1, "CONFIG", func() {
             time.Sleep(4*time.Second)
