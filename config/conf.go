@@ -603,7 +603,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 							break
 						}
 					}
-					if len(oldEntry.VbId) == 0 {
+					if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
 						delete(oldVbaMap, key)
 					} else {
 						oldVbaMap[key] = oldEntry
@@ -674,7 +674,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					for r := 0; r < len(oldEntry.VbId); r++ {
 						if oldEntry.VbId[r] == dvi.Replica[i] {
 							oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
-							if len(oldEntry.VbId) == 0 {
+							if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
 								delete(oldVbaMap, key)
 							} else {
 								changeVbaMap[key] = oldEntry
@@ -993,7 +993,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 					oldEntry.VbId = append(oldEntry.VbId[:r], oldEntry.VbId[r+1:]...)
 				}
 			}
-			if len(oldEntry.VbId) == 0 {
+			if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
 				delete(oldVbaMap, key)
 			} else {
 				oldVbaMap[key] = oldEntry
@@ -1123,7 +1123,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                 log.Println("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
                 return false
             }
-            if len(oldEntry.VbId) == 0 {
+            if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
                 delete(oldVbaMap, key)
             } else {
                 oldVbaMap[key] = oldEntry
@@ -1144,7 +1144,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                         break
                     }
                 }
-                if len(oldEntry.VbId) == 0 {
+                if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
                     delete(oldVbaMap, key)
                 } else {
                     oldVbaMap[key] = oldEntry
