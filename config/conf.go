@@ -291,7 +291,7 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
 	log.Println("lastindex is", lastindex)
 	log.Println("arr is", arr)
 	//returnIndex = 0
-	for k := 0; k < len(arr)-1; k++ {
+	for k := 0; k < len(arr); k++ {
 		// if cp.S[]
 		var j int32
 		if lastindex == 0 {
@@ -853,16 +853,27 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
 		for j := 0; j < len(dvi.Replica); j++ {
 			if activeVbMap[dvi.Replica[j]] == 1 {
 				continue
-			}
+			} else {
+			    activeVbMap[dvi.Replica[j]] = 1
+            }
 			dvil[i].Replica = append(dvil[i].Replica, dvi.Replica[j])
 			count++
 			if count == vbucketsPerServer {
 				break
 			}
 		}
-		for j := 0; j < vbucketsPerServer && j < len(dvi.Active); j++ {
+        count = 0
+		for j := 0; j < len(dvi.Active); j++ {
+            if activeVbMap[dvi.Active[j]] == 1 {
+				continue
+			} else {
+                count++
+			    activeVbMap[dvi.Active[j]] = 1
+            }
 			dvil[i].Transfer = append(dvil[i].Transfer, dvi.Active[j])
-			activeVbMap[dvi.Active[j]] = 1
+			if count == vbucketsPerServer {
+				break
+			}
 		}
 		totVbuckets := len(dvil[i].Transfer) + len(dvil[i].Replica)
 		log.Println("HandleServerAlive server is", serv)

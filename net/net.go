@@ -176,7 +176,7 @@ func HandleDebug() {
     createClient(CLIENT5)
     createClient(CLIENT6)
     time.Sleep(3 *time.Second)
-    ReplicationFail()
+    //ReplicationFail()
    //TestDiskFailure()
    //TestAliveFail()
 }
