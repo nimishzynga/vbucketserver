@@ -51,10 +51,12 @@ func (cp *Context) GetPrimaryIp(ip string) string {
 }
 
 func (cp *Context) getTransferIndex(vb int) int {
-    for _,val := range *cp.ReInfo.dvi {
-        for _,v := range val.Active {
-            if v == vb {
-                return cp.getServerIndex(val.Server)
+    if cp.ReInfo.dvi != nil {
+        for _,val := range *cp.ReInfo.dvi {
+            for _,v := range val.Active {
+                if v == vb {
+                    return cp.getServerIndex(val.Server)
+                }
             }
         }
     }
