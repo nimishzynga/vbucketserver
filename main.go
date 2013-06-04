@@ -15,7 +15,7 @@ func main() {
 	var addr = flag.String("addr", "0:14000", "Socket Listen Address - ip:port")
 	var cfg = flag.String("config", "/etc/sysconfig/vbucketserver", "Configuration file")
     var debug = flag.String("debug", "false", "VBS unit testing mode")
-    var logLevel = flag.Int("log-level", 0, "Log level for VBS")
+    var logLevel = flag.Int("log-level", 2, "Log level for VBS")
 	flag.Parse()
 
 	goweb.ConfigureDefaultFormatters()
