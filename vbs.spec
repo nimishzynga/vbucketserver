@@ -15,6 +15,8 @@ Distribution:   Vbs
 Vbucketserver component
 
 %build
+cd %{_topdir}
+export GOPATH=`pwd`
 cd %{_topdir}/src/%{_package}
 go build
 
