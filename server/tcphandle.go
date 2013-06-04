@@ -81,12 +81,12 @@ type VbsClient interface {
 func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
     //parse the conf file
 	if ok := parseInitialConfig(confFile, cls); ok == false {
-		logger.Debugf("Unable to parse the config")
+		logger.Fatalf("Unable to parse the config")
 		return
 	}
 	listener, err := net.Listen("tcp", s)
 	if err != nil {
-		logger.Debugf("error listening:", err.Error())
+		logger.Fatalf("error listening:", err.Error())
 		os.Exit(1)
 	}
 	//wait for VBA's to connect
@@ -94,7 +94,7 @@ func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			logger.Debugf("Error accept:", err.Error())
+			logger.Fatalf("Error accept:", err.Error())
 			return
 		}
 		go handleConn(conn, c, cls)
@@ -104,12 +104,12 @@ func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
 func HandleTcpDebug(c *Client, cls *config.Cluster, s string, confFile string) {
     //parse the conf file
 	if ok := parseInitialConfig(confFile, cls); ok == false {
-		logger.Debugf("Unable to parse the config")
+		logger.Fatalf("Unable to parse the config")
 		return
 	}
 	listener, err := net.ListenDebug("tcp", s)
     if err != nil {
-		logger.Debugf("error listening:", err.Error())
+		logger.Fatalf("error listening:", err.Error())
 		os.Exit(1)
 	}
 	//wait for VBA's to connect
@@ -117,7 +117,7 @@ func HandleTcpDebug(c *Client, cls *config.Cluster, s string, confFile string) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			logger.Debugf("Error accept:", err.Error())
+			logger.Fatalf("Error accept:", err.Error())
 			return
 		}
 		go handleConn(conn, c, cls)
@@ -138,7 +138,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 		conn.Write(l.Bytes())
 		_, err := conn.Write(m)
 		if err != nil {
-			logger.Debugf("Error write", err.Error())
+			logger.Warnf("Error write", err.Error())
 			return
 		}
 	}
@@ -155,13 +155,13 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 
 	defer func() {
 		conn.Close()
-		logger.Debugf("disconnecting client", getIpAddr(conn))
+		logger.Infof("disconnecting client", getIpAddr(conn))
         if vc != nil {
             var cp *config.Context = nil
             if vc.ClientType() == CLIENT_VBA {
                 cp = cls.GetContext(getIpAddr(conn))
                 if cp == nil {
-                    logger.Debugf("Not able to find context for", getIpAddr(conn))
+                    logger.Warnf("Not able to find context for", getIpAddr(conn))
                 }
             }
             RemoveConn(conn, co, vc.ClientType(), cp)
@@ -192,7 +192,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 	for {
 		select {
         case err := <-c1:
-			logger.Debugf("error on socket", err)
+			logger.Warnf("error on socket", err)
 			return
 		case data = <-c2:
 			currTimeouts = 0
@@ -206,11 +206,11 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			}
 		case <-time.After((HBTIME+5) * time.Second):
 			currTimeouts++
-			logger.Debugf("timeout on socket", getIpAddr(conn))
+			logger.Warnf("timeout on socket", getIpAddr(conn))
 			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
 				return
 			}
-			logger.Debugf("timeout on socket", getIpAddr(conn))
+			logger.Warnf("timeout on socket", getIpAddr(conn))
 			length = 0
 			fullData = fullData[:0]
 			continue
@@ -224,7 +224,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 						buf := bytes.NewBuffer(fullData)
 						binary.Read(buf, binary.BigEndian, &length)
 						if length > RECV_BUF_LEN {
-							logger.Debugf("Data size is more", length, fullData)
+							logger.Warnf("Data size is more", length, fullData)
 							return
 						}
 						fullData = fullData[HEADER_SIZE:]
@@ -255,7 +255,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 
 			switch ret := handleMsg(m, conn, &state, c, co, cls, c3, vc); ret {
 			case STATUS_ERR:
-                logger.Debugf("handleMsg returned error")
+                logger.Infof("handleMsg returned error")
 				hasData = false
 				m = nil
                 //return
@@ -271,7 +271,7 @@ func parseMsg(b []byte) (*RecvMsg, error) {
 	m := &RecvMsg{}
 	var err error
 	if err = json.Unmarshal(b, m); err != nil {
-		logger.Debugf("error in unmarshalling", err)
+		logger.Warnf("error in unmarshalling", err)
 	}
 	return m, err
 }

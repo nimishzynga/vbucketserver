@@ -204,7 +204,7 @@ func getServerIndex(cp *config.Context, sr string) int {
 			return s
 		}
 	}
-	logger.Debugf("Server not found.input server is", sr, "all are", cp.C.Servers)
+	logger.Warnf("Server not found.input server is", sr, "all are", cp.C.Servers)
 	//panic("server not found")
 	return -1
 }
@@ -233,7 +233,7 @@ func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
                 return
             }
         case <-time.After((2*HBTIME+5) * time.Second):
-            logger.Debugf("Unable to push config/timeing out.so failing node", getIpAddrWithPort(cl.Conn))
+            logger.Warnf("Unable to push config/timeing out.so failing node", getIpAddrWithPort(cl.Conn))
             cp.HandleServerDown([]string{getIpAddrWithPort(cl.Conn)})
         }
     }()

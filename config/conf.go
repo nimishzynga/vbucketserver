@@ -1139,7 +1139,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                 }
             }
             if found == false {
-                logger.Debugf("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
+                logger.Warnf("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
                 return false
             }
             if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
@@ -1152,7 +1152,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
 		    vbucket := vbucketMa[vb]
             for k := 1; k < len(vbucket); k++ {
                 if vbucket[k] < 0 {
-                    logger.Debugf("ha ha ha HandleTransferDone")
+                    logger.Debugf("HandleTransferDone")
                     break
                 }
                 key = serverList[src] + serverList[vbucket[k]]
@@ -1257,12 +1257,12 @@ func (cls *Cluster) GetContext(ip string) *Context {
 	ip = strings.Split(ip, ":")[0]
 	clusterName, ok := cls.IpMap[ip]
 	if ok == false {
-		logger.Debugf("Ip not in cluster name list", ip, cls)
+		logger.Warnf("Ip not in cluster name list", ip, cls)
 		return nil
 	}
 	cp, ok := cls.ContextMap[clusterName]
 	if ok == false {
-		logger.Debugf("cluster not in cluster name list", clusterName)
+		logger.Warnf("cluster not in cluster name list", clusterName)
 		return nil
 	}
 	return cp
