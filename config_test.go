@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"vbucketserver/log"
 	"sort"
 	"testing"
 	"vbucketserver/config"
@@ -22,10 +22,10 @@ func verifyMap(c *config.Context, t *testing.T) {
 	}
 
 	for i := range serArrActive {
-		log.Println("Active :for i is", i, serArrActive[i])
+		logger.Debugf("Active :for i is", i, serArrActive[i])
 	}
 	for i := range serArrReplica {
-		log.Println("Replica:for i is", i, serArrReplica[i])
+		logger.Debugf("Replica:for i is", i, serArrReplica[i])
 	}
 	for i := range serArrActive {
 		for j := range serArrActive[i] {
@@ -104,7 +104,7 @@ func Test_handleDown(t *testing.T) {
     cp.NodeFi.F = append(cp.NodeFi.F, entry)
     ok, out := cp.HandleDown()
     if ok {
-        log.Println("list is", out)
+        logger.Debugf("list is", out)
     }
 }
 
@@ -122,9 +122,9 @@ func Test_HandleServerDown(t *testing.T) {
 	ct.GenMap("test", c)
 	_, mp := ct.HandleServerDown([]string{"1.1.1.1"})
 	for val := range ct.S {
-		log.Println(ct.S[val].ReplicaVbuckets)
+		logger.Debugf(ct.S[val].ReplicaVbuckets)
 	}
-	log.Println("push config is", mp)
+	logger.Debugf("push config is", mp)
 }
 
 /*

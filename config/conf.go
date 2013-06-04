@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+    "vbucketserver/log"
 	"math/rand"
 	"strings"
 )
@@ -16,6 +16,12 @@ const (
 	RESHARD_DONE_STR = "No resharding"
     FAIL_COUNT       = 3
 )
+
+var logger *log.SysLog
+
+func SetLogger(l *log.SysLog) {
+    logger = l
+}
 
 //return the secondary ip given any ip
 //return the same ip, if it is secondary
@@ -88,7 +94,7 @@ func (cp *Context) getPrimaryIndex(i int) int {
 }
 
 func (cp *Context) getIndex(s int, arr []VbucketCountBoth, isactive bool) int {
-	log.Println("index is", s)
+	logger.Debugf("index is", s)
 	pri := arr[s].primary
 	sec := arr[s].secondary
 	if isactive {
@@ -113,10 +119,10 @@ func (cp *Context) getIndex(s int, arr []VbucketCountBoth, isactive bool) int {
 //in account
 func (cp *Context) generatevBucketMap(c *Config) (*[][]int, *[]uint32, bool) {
 	serv := len(c.Servers)
-	log.Println("Number of servers are", serv)
+	logger.Debugf("Number of servers are", serv)
 	capacityMap := make([]uint32, len(c.Servers))
 	maxActive := int(c.Vbuckets) / serv
-	log.Println("maxActive is", maxActive, c.Vbuckets)
+	logger.Debugf("maxActive is", maxActive, c.Vbuckets)
 	countVbuckets := make([]VbucketCountBoth, len(c.Servers))
 	if int(c.Vbuckets)%serv > 0 {
 		maxActive += 1
@@ -136,7 +142,7 @@ func (cp *Context) generatevBucketMap(c *Config) (*[][]int, *[]uint32, bool) {
 	//distribute the active vbuckets
 	for i := 0; i < int(c.Vbuckets); i++ {
 		s := i / maxActive
-		log.Println("s is", s)
+		logger.Debugf("s is", s)
 		confMap[i][0] = cp.getIndex(s, countVbuckets, true)
 		capacityMap[s]++
 		//distribute the replicas
@@ -159,13 +165,13 @@ func (cp *Context) generatevBucketMap(c *Config) (*[][]int, *[]uint32, bool) {
 			}
 		}
 	}
-	log.Println("conf map is", confMap)
+	logger.Debugf("conf map is", confMap)
 	return &confMap, &capacityMap, false
 }
 
 func (cp *Context) generateVBAmap() {
 	m := cp.V.Smap.VBucketMap
-	log.Println("map is", m)
+	logger.Debugf("map is", m)
 	serverList := cp.V.Smap.ServerList
 	vbaMap := make(map[string]VbaEntry)
 	var entry VbaEntry
@@ -201,7 +207,7 @@ func (cp *Context) generateVBAmap() {
 		}
 	}
 	cp.VbaInfo = vbaMap
-	//log.Println("generateVBAmap : vba info is", cp.VbaInfo)
+	//logger.Debugf("generateVBAmap : vba info is", cp.VbaInfo)
 }
 
 func (cp *Context) parseIps(cfg *Config) int {
@@ -227,7 +233,7 @@ func (cp *Context) parseIps(cfg *Config) int {
 
 func (cp *Context) GenMap(cname string, cfg *Config) {
 	sec := cp.parseIps(cfg)
-	log.Println("config is", cfg)
+	logger.Debugf("config is", cfg)
 	if rv, cm, err := cp.generatevBucketMap(cfg); err == false {
 		cp.M.Lock()
 		defer cp.M.Unlock()
@@ -235,17 +241,17 @@ func (cp *Context) GenMap(cname string, cfg *Config) {
 		cp.V.Smap.HashAlgorithm = cfg.Hash
 		cp.V.Port = cfg.Port
 		cp.V.Smap.NumReplicas = int(cfg.Replica)
-		log.Println("serverlist is", cfg.Servers)
+		logger.Debugf("serverlist is", cfg.Servers)
 		//cp.V.Smap.ServerList = cfg.Servers
 		cp.V.Name = cname
 		cp.C = *cfg //update the cfgfig
 		cp.generateVBAmap()
 		cp.copyVbucketMap() //create the vbucketmap forward
-		log.Println("capacity is", cfg.Capacity)
+		logger.Debugf("capacity is", cfg.Capacity)
 		cp.updateMaxCapacity(cfg.Capacity, len(cfg.Servers), cm, sec)
-		//log.Println("updated map ", cp.V)
+		//logger.Debugf("updated map ", cp.V)
 	} else {
-		log.Fatal("failed to generate config map ")
+		logger.Fatalf("failed to generate config map ")
 	}
 }
 
@@ -255,7 +261,7 @@ func (cp *Context) updateMaxCapacity(capacity int16, totServers int,
 		(1+(float32(capacity)/100))) / uint32(totServers)
 	for i := 0; i < totServers; i++ {
 		c := *NewServerInfo(cc, (*cm)[i])
-		log.Println("Capacity , server :", cc, i)
+		logger.Debugf("Capacity , server :", cc, i)
 		cp.S = append(cp.S, c)
 	}
 	for k := 0; k < sec; k++ {
@@ -271,7 +277,7 @@ func (cp *Context) SameServer(index1 int, index2 int) bool {
 //return the free server
 func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
 	var arr []int
-	log.Println("in findFreeServer: s3 is", s3)
+	logger.Debugf("in findFreeServer: s3 is", s3)
 	if len(s3) == 0 {
 		arr = make([]int, len(cp.V.Smap.ServerList))
 		for i := 0; i < len(cp.V.Smap.ServerList); i++ {
@@ -284,14 +290,14 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
 	for _, j := range s2 {
 		for k := 0; k < len(arr); k++ {
 			if cp.SameServer(arr[k], j) {
-				log.Println("removing", arr[k], j)
+				logger.Debugf("removing", arr[k], j)
 				arr = append(arr[:k], arr[k+1:]...)
 			}
 		}
 	}
 	lastindex := len(arr) - 1
-	log.Println("lastindex is", lastindex)
-	log.Println("arr is", arr)
+	logger.Debugf("lastindex is", lastindex)
+	logger.Debugf("arr is", arr)
 	//returnIndex = 0
 	for k := 0; k < len(arr); k++ {
 		// if cp.S[]
@@ -307,13 +313,13 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int) int {
 			cp.S[i].currentVbuckets++
 			return i
 		} else {
-			log.Println("failed current and max ,index", serInfo.currentVbuckets, serInfo.MaxVbuckets, i)
+			logger.Debugf("failed current and max ,index", serInfo.currentVbuckets, serInfo.MaxVbuckets, i)
 		}
 		arr[j], arr[lastindex] = arr[lastindex], arr[j]
 		lastindex--
 	}
 	//Need to have a list of vbuckets for which server is not available
-	log.Println("freeserver not found for ", cp.S)
+	logger.Fatalf("freeserver not found for ", cp.S)
 	cp.Rebalance = true
 	return -1
 }
@@ -324,7 +330,7 @@ func (cp *Context) reduceCapacity(s int, n int, c uint32) {
 		cp.S[s].currentVbuckets = 0
 	} else {
 		if cp.S[s].NumberOfDisk == 0 {
-			log.Println("Disk is Zero for", s)
+			logger.Debugf("Disk is Zero for", s)
 			return
 		}
 		cp.S[s].MaxVbuckets -= (uint32(n) * cp.S[s].MaxVbuckets) / uint32(cp.S[s].NumberOfDisk)
@@ -336,7 +342,7 @@ func (cp *Context) getServerVbuckets(s int) *DeadVbucketInfo {
 	vbaMap := cp.V.Smap.VBucketMap
 	priIndex := cp.getPrimaryIndex(s)
 	secIndex := cp.getSecondaryIndex(s)
-    log.Println("inside getserverbucket", priIndex,secIndex)
+    logger.Debugf("inside getserverbucket", priIndex,secIndex)
 	dvi := new(DeadVbucketInfo)
 	for i := 0; i < len(vbaMap); i++ {
 		for j := 0; j < len(vbaMap[i]); j++ {
@@ -448,10 +454,10 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 		}
 		var j int
 		if vbucket[0] == ser {
-			log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
+			logger.Debugf("vbucket", vbucket, "j is", j, "ser is", ser)
 			serverIndex := cp.findFreeServer(vbucket[0], []int{ser}, nil)
 			if serverIndex != -1 {
-				log.Println("j is, new server is", j, serverIndex)
+				logger.Debugf("j is, new server is", j, serverIndex)
 				key := serverList[serverIndex]
 				oldEntry := oldVbaMap[key]
 				oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
@@ -459,25 +465,25 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 				oldVbaMap[key] = oldEntry
 				vbucketMa[dvi.Active[i]][0] = serverIndex
 			} else {
-				log.Println("CRITICAL:Not enough capacity for active vbuckets")
+				logger.Fatalf("CRITICAL:Not enough capacity for active vbuckets")
 				break
 			}
 		}
 	}
 	cp.VbaInfo = oldVbaMap
-	log.Println("new vbucket map was", vbucketMa)
+	logger.Debugf("new vbucket map was", vbucketMa)
 	return true, changeVbaMap
 }
 
 func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi DeadVbucketInfo,
 	allFailedIndex []int, allNewIndex []int) {
-	log.Println("Inside HandleTransferVbuckets")
+	logger.Debugf("Inside HandleTransferVbuckets")
 	//transfer should be affected in FFT
 	oldVbaMap := cp.VbaInfo
 	vbucketMa := cp.V.Smap.VBucketMap
 	serverList := cp.V.Smap.ServerList
 	for i := range dvi.Transfer {
-		log.Println("inside transfer for loop")
+		logger.Debugf("inside transfer for loop")
 		vbucket := vbucketMa[dvi.Transfer[i]]
         //need to append for all replica
         index := cp.getRestoreIndex(dvi.Transfer[i])
@@ -495,7 +501,7 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
         }()
         ser := cp.findFreeServer(vbucket[1], failedIndex, allNewIndex)
 		//add the new transfer entry
-		log.Println("server index are", vbucket[0], ser, serverList)
+		logger.Debugf("server index are", vbucket[0], ser, serverList)
 		key := serverList[vbucket[0]] + serverList[ser]
 		oldEntry, ok := oldVbaMap[key]
 		if ok == false {
@@ -511,7 +517,7 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
 
 func (cp *Context) VerifyCheckPoints(s int, d int, v int) bool {
 	if cp.S[s].ckPointMap[v] == cp.S[d].ckPointMap[v] == false {
-		log.Println("check point not matching source destination vbucket checkpoints", s, d, v, cp.S[s].ckPointMap[v], cp.S[d].ckPointMap[v])
+		logger.Errorf("check point not matching source destination vbucket checkpoints", s, d, v, cp.S[s].ckPointMap[v], cp.S[d].ckPointMap[v])
 		return false
 	}
 	return true
@@ -525,7 +531,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 	serverList := cp.V.Smap.ServerList
 	vbucketMa := cp.V.Smap.VBucketMap
 	changeVbaMap := make(map[string]VbaEntry)
-	log.Println("input server list is", sl)
+	logger.Debugf("input server list is", sl)
 	allFailedIndex := []int{}
 	allNewIndex := []int{}
 	for _, i := range newServerList {
@@ -544,7 +550,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 			allFailedIndex = []int{ser}
 		}
 		if ser == -1 {
-			log.Println("Server not in list", s)
+			logger.Warnf("Server not in list", s)
 			return false, changeVbaMap
 		} else if serverDown == false {
 			d := cp.getServerVbuckets(ser)
@@ -553,7 +559,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					if dvi.Active[i] != d.Active[j] {
 						j++
 						if j == len(d.Active) {
-							log.Println("Invalid active vbuckets", dvi.Active, d.Active)
+							logger.Errorf("Invalid active vbuckets", dvi.Active, d.Active)
 							return false, nil
 						}
 					} else {
@@ -567,7 +573,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					if dvi.Replica[i] != d.Replica[j] {
 						j++
 						if j == len(d.Replica) {
-							log.Println("Invalid replica vbuckets", dvi.Replica, d.Replica)
+							logger.Errorf("Invalid replica vbuckets", dvi.Replica, d.Replica)
 							return false, nil
 						}
 					} else {
@@ -577,8 +583,8 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 				i++
 			}
 		}
-		log.Println("Failed vbuckets :", dvi)
-		log.Println("old vbucket map was", vbucketMa)
+		logger.Debugf("Failed vbuckets :", dvi)
+		logger.Debugf("old vbucket map was", vbucketMa)
 		if capHandle {
 			cp.reduceCapacity(ser, dvi.DisksFailed, uint32(len(dvi.Active)+len(dvi.Replica)))
 		}
@@ -619,18 +625,18 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					}
 				}
 				if k == len(vbucket) {
-					log.Println("CRITICAL:Not enough capacity for active vbuckets")
+					logger.Fatalf("CRITICAL:Not enough capacity for active vbuckets")
 					return true, changeVbaMap
 				}
 				if vbucketMa[dvi.Active[i]][k] == REPLICA_RESTORE ||
 					cp.VerifyCheckPoints(vbucket[0], vbucket[k], dvi.Active[i]) == false {
-					log.Println("Need manual restore for vbucket", dvi.Active)
+					logger.Errorf("Need manual restore for vbucket", dvi.Active)
 					continue
 				}
 				vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][k]
 				serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], allFailedIndex, allNewIndex)
                 if serverIndex == -1 {
-                    log.Println("Not enough capacity")
+                    logger.Fatalf("Not enough capacity")
                     continue
                 }
 				vbucketMa[dvi.Active[i]][k] = REPLICA_RESTORE
@@ -699,7 +705,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 				var j int
 				for j = 0; j < len(vbucket); j++ {
 					if cp.SameServer(vbucket[j], ser) {
-						log.Println("vbucket", vbucket, "j is", j, "ser is", ser)
+						logger.Debugf("vbucket", vbucket, "j is", j, "ser is", ser)
                         index := cp.getTransferIndex(ser)
                         failedIndex := allFailedIndex
                         func() {
@@ -722,7 +728,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 							append(cp.S[cp.getPrimaryIndex(serverIndex)].ReplicaVbuckets, dvi.Replica[i])
 						replicaEntry := VbaEntry{Source: serverList[serverIndex]}
 						changeVbaMap[serverList[serverIndex]] = replicaEntry
-						log.Println("j is, new server is", j, serverIndex)
+						logger.Debugf("j is, new server is", j, serverIndex)
 						key := serverList[vbucket[0]]
 						oldEntry, ok := oldVbaMap[key]
 						if ok == false {
@@ -738,7 +744,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 		}
 
 		if serverDown {
-			log.Println("inside serverDown", ser, cp.V.Smap.ServerList)
+			logger.Debugf("inside serverDown", ser, cp.V.Smap.ServerList)
 			for i := range cp.C.Servers {
 				if cp.GetPrimaryIp(cp.C.Servers[i]) == cp.GetPrimaryIp(cp.V.Smap.ServerList[ser]) {
 					cp.C.Servers[i] = DEAD_NODE_IP
@@ -749,9 +755,9 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 			cp.V.Smap.ServerList[cp.getSecondaryIndex(ser)] = DEAD_NODE_IP
 		}
 	}
-	log.Println("new vbucket map was", vbucketMa)
-	log.Println("changed vba map is", changeVbaMap)
-	log.Println("Final vbaMap is", oldVbaMap)
+	logger.Debugf("new vbucket map was", vbucketMa)
+	logger.Debugf("changed vba map is", changeVbaMap)
+	logger.Debugf("Final vbaMap is", oldVbaMap)
 	return true, changeVbaMap
 }
 
@@ -878,7 +884,7 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
 			}
 		}
 		totVbuckets := len(dvil[i].Transfer) + len(dvil[i].Replica)
-		log.Println("HandleServerAlive server is", serv)
+		logger.Debugf("HandleServerAlive server is", serv)
 		si := cp.S[cp.getServerIndex(serv)]
 		si.currentVbuckets += uint32(totVbuckets)
 	}
@@ -889,7 +895,7 @@ func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (
 		cp.C.SecondaryIps = append(cp.C.SecondaryIps, secIp...)
 	}
 	cp.AddServerInfo(ser, secIp)
-	log.Println("calling HandleDeadVbuket", dvil, ser)
+	logger.Debugf("calling HandleDeadVbuket", dvil, ser)
 	return cp.HandleDeadVbuckets(dvil, nil, false, ser, false)
 	// cp.M.Unlock()
 }
@@ -901,7 +907,7 @@ func (cp *Context) getServerIndex(si string) int {
 			return i
 		}
 	}
-	log.Println("Index not found.server list is", s, si)
+	logger.Debugf("Index not found.server list is", s, si)
 	return -1
 }
 
@@ -926,12 +932,12 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 	defer cp.M.Unlock()
 	i := cp.getServerIndex(ci.Server)
 	if i == -1 {
-		log.Println("Server not found for capaciy update", ci.Server)
+		logger.Errorf("Server not found for capaciy update", ci.Server)
 		return
 	}
 	si := cp.S[i]
 	if si.NumberOfDisk == 0 {
-		log.Println("Capacity is zero for", ci.Server)
+		logger.Warnf("Capacity is zero for", ci.Server)
 		return
 	}
 	si.MaxVbuckets += (si.MaxVbuckets * uint32(ci.DiskAlive)) / uint32(si.NumberOfDisk)
@@ -941,7 +947,7 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 func (cls *Cluster) GetContextFromClusterName(clusterName string) *Context {
 	cp, ok := cls.ContextMap[clusterName]
 	if ok == false {
-		log.Println("cluster not in cluster name list", clusterName)
+		logger.Warnf("cluster not in cluster name list", clusterName)
 		return nil
 	}
 	return cp
@@ -977,7 +983,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 	cp.M.Lock()
 	serverList := cp.V.Smap.ServerList
 	serverToInfo := make(map[string]int)
-	log.Println("inside HandleRestoreCheckPoints for ip", ip, vbl.Replica)
+	logger.Debugf("inside HandleRestoreCheckPoints for ip", ip, vbl.Replica)
 	for i, vb := range vbl.Replica {
 		src := 0
 		if i%2 == 0 {
@@ -987,14 +993,14 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 		}
 
         if cp.UpdateRestoreVbuckets(ip, vb) == false {
-            log.Println("Restore vbucket: vbucket does not belong",vb,ip)
+            logger.Warnf("Restore vbucket: vbucket does not belong",vb,ip)
             continue
         }
 
 		//this is putting the vbucket in the map
 		ms := cp.getMasterServer(vb, src)
 		if src == -1 || ms == -1 {
-			log.Println("Error in getting HandleRestoreCheckPoints src ms", src, ms)
+			logger.Warnf("Error in getting HandleRestoreCheckPoints src ms", src, ms)
 			return nil
 		}
 		key := serverList[ms]
@@ -1012,7 +1018,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 				oldVbaMap[key] = oldEntry
 			}
 		} else {
-			log.Println("key did not find in the server", key)
+			logger.Warnf("key did not find in the server", key)
 		}
 
 		key = serverList[ms] + serverList[src]
@@ -1030,7 +1036,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 	}
     cp.updateReshardStatus(cp.getServerIndex(ip), vbl)
 	cp.M.Unlock()
-	log.Println("returing the serverinfo", serverToInfo)
+	logger.Debugf("returing the serverinfo", serverToInfo)
 	return serverToInfo
 	//return nil
 }
@@ -1061,7 +1067,7 @@ func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
         }()
     }
     if len(NewlyFailedNode) > 0 {
-        log.Println("failing node", NewlyFailedNode)
+        logger.Warnf("failing node", NewlyFailedNode)
         return cp.HandleServerDown(NewlyFailedNode)
     }
     return false,nil
@@ -1074,10 +1080,10 @@ func (cp *Context) DecideServer(f []FailureEntry) []string {
 	for _, en := range f {
         ip := cp.GetPrimaryIp(en.Dst)
         if ip == "" {
-            log.Println("Server to fail:Not found", en.Dst)
+            logger.Debugf("Server to fail:Not found", en.Dst)
             continue
         }
-        log.Println("primary ip in decide server is",ip)
+        logger.Infof("primary ip in decide server is",ip)
         if failCount[ip] == nil {
             failCount[ip]= make(map[string]int)
         }
@@ -1087,7 +1093,7 @@ func (cp *Context) DecideServer(f []FailureEntry) []string {
 		if len(val) >= FAIL_COUNT {
 			failedServer = append(failedServer, key)
 		}
-        log.Println("map is",val)
+        logger.Debugf("map is",val)
 	}
 	return failedServer
 }
@@ -1105,27 +1111,27 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
 	if cp == nil {
 		return nil
 	}
-	log.Println("In transfer done")
+	logger.Debugf("In transfer done")
 	serverList := cp.V.Smap.ServerList
 	changeVbaMap := make(map[string]VbaEntry)
 	vbucketMa := cp.V.Smap.VBucketMap
 	vbucketMaFwd := cp.V.Smap.VBucketMapForward
 	src := cp.getServerIndex(ip)
 	if src == -1 {
-		log.Println("in HandleTransferDone src", src)
+		logger.Debugf("in HandleTransferDone src", src)
 		return nil
 	}
 	oldVbaMap := cp.VbaInfo
 	for _, vb := range vbl.Active {
 		d := vbucketMaFwd[vb][0]
         removeEntry := func (src int) bool {
-            log.Println("in HandleTransferDone src", src)
+            logger.Debugf("in HandleTransferDone src", src)
             found := false
             key := serverList[src] + serverList[d]
             oldEntry, _ := oldVbaMap[key]
             for r := 0; r < len(oldEntry.Transfer_VbId); r++ {
                 if oldEntry.Transfer_VbId[r] == vb {
-                    log.Println("vbucket found",vb)
+                    logger.Debugf("vbucket found",vb)
                     oldEntry.Transfer_VbId = append(oldEntry.Transfer_VbId[:r],
                         oldEntry.Transfer_VbId[r+1:]...)
                     found = true
@@ -1133,7 +1139,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                 }
             }
             if found == false {
-                log.Println("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
+                logger.Debugf("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
                 return false
             }
             if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
@@ -1146,7 +1152,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
 		    vbucket := vbucketMa[vb]
             for k := 1; k < len(vbucket); k++ {
                 if vbucket[k] < 0 {
-                    log.Println("ha ha ha HandleTransferDone")
+                    logger.Debugf("ha ha ha HandleTransferDone")
                     break
                 }
                 key = serverList[src] + serverList[vbucket[k]]
@@ -1251,12 +1257,12 @@ func (cls *Cluster) GetContext(ip string) *Context {
 	ip = strings.Split(ip, ":")[0]
 	clusterName, ok := cls.IpMap[ip]
 	if ok == false {
-		log.Println("Ip not in cluster name list", ip, cls)
+		logger.Debugf("Ip not in cluster name list", ip, cls)
 		return nil
 	}
 	cp, ok := cls.ContextMap[clusterName]
 	if ok == false {
-		log.Println("cluster not in cluster name list", clusterName)
+		logger.Debugf("cluster not in cluster name list", clusterName)
 		return nil
 	}
 	return cp

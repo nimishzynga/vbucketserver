@@ -1,20 +1,24 @@
 package main
 
 import (
-	"code.google.com/p/goweb/goweb"
-	"log"
+	"vbucketserver/goweb"
+	"vbucketserver/log"
 	"vbucketserver/config"
 	"vbucketserver/server"
+	"vbucketserver/net"
+    "os"
 )
+
+var logger *log.SysLog
 
 func HandleUpLoadConfig(c *goweb.Context, cls *config.Cluster) {
 	if c.IsPost() || c.IsPut() {
 		clsNew := config.NewCluster()
 		if err := c.Fill(&clsNew); err != nil {
-			log.Println("got error", err)
+			logger.Warnf("got error", err)
 			return
 		}
-		log.Println("data is", clsNew)
+		logger.Debugf("data is", clsNew)
 		for key, cfg := range clsNew.ConfigMap {
 			cp := &config.Context{}
 			cp.GenMap(key, &cfg)
@@ -40,13 +44,13 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 	if c.IsPost() || c.IsPut() {
 		var dvi config.DeadVbucketInfo
 		if err := c.Fill(&dvi); err != nil {
-			log.Println("got error", err)
+			logger.Warnf("got error", err)
 			return
 		}
-		log.Println("server is", dvi.Server)
+		logger.Debugf("server is", dvi.Server)
 		cp := cls.GetContext(dvi.Server)
 		if cp == nil {
-			log.Println("Context not found for", dvi.Server)
+			logger.Warnf("Context not found for", dvi.Server)
 			return
 		}
 		args := []config.DeadVbucketInfo{dvi}
@@ -62,21 +66,21 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
-			log.Println("got error", err)
+			logger.Warnf("got error", err)
 			return
 		}
-		log.Println("si is", si)
+		logger.Debugf("si is", si)
 		if len(si.Server) == 0 {
-			log.Println("server is null")
+			logger.Debugf("server is null")
 			return
 		}
 		//TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
-			log.Println("Context not found for", si.Server)
+			logger.Debugf("Context not found for", si.Server)
 			return
 		}
-		log.Println("downserver is", si.Server)
+		logger.Debugf("downserver is", si.Server)
 		//TODO:Need to fix here
 		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
@@ -89,18 +93,18 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
-			log.Println("got error", err)
+			logger.Warnf("got error", err)
 			return
 		}
-		log.Println("si is", si)
+		logger.Debugf("si is", si)
 		if len(si.Server) == 0 {
-			log.Println("server is null")
+			logger.Debugf("server is null")
 			return
 		}
 		//TODO:Need to fix here.Assuming all server belongs to same cluster
 		cfgctx := cls.GetContext(si.Server[0])
 		if cfgctx == nil {
-			log.Println("Context not found for", si.Server)
+			logger.Debugf("Context not found for", si.Server)
 			return
 		}
         if cfgctx.SetReshard() == false {
@@ -108,7 +112,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			c.WriteResponse(data, 200)
 			return
 		}
-		log.Println("downserver is", si.Server)
+		logger.Debugf("downserver is", si.Server)
 		//TODO:Need to fix here
 		ok, mp := cfgctx.HandleReshardDown(si.Server, si.Capacity)
 		if ok {
@@ -118,27 +122,27 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 }
 
 func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client) {
-	log.Println("Adding new server")
+	logger.Debugf("Adding new server")
 	if c.IsPost() || c.IsPut() {
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
-			log.Println("got error", err)
+			logger.Warnf("got error", err)
 			return
 		}
 		cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
 		if cfgctx == nil {
-			log.Println("Context not found for", si.Server)
+			logger.Debugf("Context not found for", si.Server)
 			return
 		}
-		log.Println("got cluster name as", c.PathParams["cluster"])
+		logger.Debugf("got cluster name as", c.PathParams["cluster"])
 		for _, serv := range si.Server {
 			if serv == "" {
-				log.Println("Invalid server in server alive")
+				logger.Debugf("Invalid server in server alive")
 				return
 			}
 			for _, s := range cfgctx.C.Servers {
 				if s == serv {
-					log.Println("Server already in server alive")
+					logger.Debugf("Server already in server alive")
 					return
 				}
 			}
@@ -161,12 +165,12 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 	if c.IsPost() || c.IsPut() {
 		var si config.CapacityUpdateInfo
 		if err := c.Fill(&si); err != nil {
-			log.Println("got error", err)
+			logger.Warnf("got error", err)
 			return
 		}
 		cfgctx := cls.GetContext(si.Server)
 		if cfgctx == nil {
-			log.Println("Context not found for", si.Server)
+			logger.Warnf("Context not found for", si.Server)
 			return
 		}
 		cfgctx.HandleCapacityUpdate(si)
@@ -176,7 +180,7 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 func HandleReshardStatus(c *goweb.Context, cls *config.Cluster) {
 	cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
 		if cfgctx == nil {
-            log.Println("HandleReshardStatus :Context not found")
+            logger.Warnf("HandleReshardStatus :Context not found")
 			return
 	    }
 	status := cfgctx.GetReshardStatus()
@@ -188,19 +192,38 @@ func HandleCapacityInfo(c *goweb.Context, cls *config.Cluster) {
 	if c.IsPost() || c.IsPut() {
     var si config.CapacityUpdateInfo
 		if err := c.Fill(&si); err != nil {
-			log.Println("got error", err)
+			logger.Debugf("got error", err)
 			return
 		}
 		cfgctx := cls.GetContext(si.Server)
 		if cfgctx == nil {
-			log.Println("Context not found for", si.Server)
+			logger.Debugf("Context not found for", si.Server)
 			return
 		}
 		cfgctx.HandleCapacityInfo(si)
     }
 }*/
 
+func createLogger(level int) {
+    logger = log.NewSysLog(os.Stdout, "[VBS]", level)
+    config.SetLogger(logger)
+    server.SetLogger(logger)
+    net.SetLogger(logger)
+}
+
+func HandleLogger(c *goweb.Context, cls *config.Cluster) {
+    if c.IsPost() || c.IsPut() {
+        var si config.Params
+        if err := c.Fill(&si); err != nil {
+            logger.Warnf("got error", err)
+            return
+        }
+        createLogger(si.LogLevel)
+    }
+}
+
 func SetupHandlers(cls *config.Cluster, co *server.Client) {
+
 	goweb.MapFunc("/{cluster}/uploadConfig", func(c *goweb.Context) {
 		HandleUpLoadConfig(c, cls)
 	})
@@ -231,10 +254,16 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
 
 	goweb.MapFunc("/{cluster}/reshardStatus", func(c *goweb.Context) {
 		HandleReshardStatus(c, cls)
-	})
+    })
 
-	/*
-		    goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
-				HandleCapacityInfo(c, cls)
-			}))*/
+    goweb.MapFunc("/{cluster}/setParams", func(c *goweb.Context) {
+		HandleLogger(c, cls)
+    })
+
+    /*
+    goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
+        HandleCapacityInfo(c, cls)
+    }))*/
 }
+
+

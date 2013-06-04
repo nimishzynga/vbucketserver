@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/ioutil"
-	"log"
+	"vbucketserver/log"
     "vbucketserver/net"
 	"os"
 	"strings"
@@ -13,9 +13,15 @@ import (
 	"vbucketserver/config"
 )
 
+var logger *log.SysLog
+
 const (
 	MAX_CONFIG_LEN = 4 * 1024
 )
+
+func SetLogger(l *log.SysLog) {
+    logger = l
+}
 
 func getIpAddr(c net.Conn) string {
 	ip := strings.Split(c.RemoteAddr().String(), ":")[0]
@@ -33,27 +39,27 @@ func parseInitialConfig(f string, cls *config.Cluster) bool {
 	fi, err := os.Open(f)
 	if err != nil {
 		//XXX:may be need to change here
-		log.Fatal("Unable to open initial config file", err)
+		logger.Fatalf("Unable to open initial config file", err)
 	}
 	defer fi.Close()
 	//XXX:Need to increase the buffer size
 	buf := make([]byte, MAX_CONFIG_LEN)
 	buf, err = ioutil.ReadAll(fi)
 	if err != nil {
-		log.Fatal("Error in reading inital config file", err)
+		logger.Fatalf("Error in reading inital config file", err)
 	}
 
 	if err := json.Unmarshal(buf, &cls.ConfigMap); err != nil {
-		log.Fatal("Error in unmarshalling config file contents")
+		logger.Fatalf("Error in unmarshalling config file contents")
 	}
 
-	log.Println("Initial Cluster config is ", cls)
+	logger.Debugf("Initial Cluster config is ", cls)
 	cls.M.Lock()
 	if cls.GenerateIpMap() == false {
-		log.Fatal("Same server in multiple pools in Config")
+		logger.Fatalf("Same server in multiple pools in Config")
 	}
 	if err := validateConfig(cls); err != nil {
-		log.Fatal(err)
+		logger.Fatalf(err.Error())
 	}
 	cls.M.Unlock()
 	return true
@@ -75,7 +81,7 @@ func validateConfig(cls *config.Cluster) error {
 
 //return the message structure for a message type
 func getMsg(t int, args ...interface{}) ([]byte, error) {
-    log.Println("command type is", t)
+    logger.Debugf("command type is", t)
 	return func(args []interface{}) ([]byte, error) {
 		switch t {
 		case MSG_INIT:
@@ -94,7 +100,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					data.Buckets = append(data.Buckets, cp.V)
 					cp.M.RUnlock()
 				}
-				log.Println("agent is", agent)
+				logger.Debugf("agent is", agent)
 				m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: data, HeartBeatTime: t}
 				return json.Marshal(m)
 			} else {
@@ -148,7 +154,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
                         //cp.S[index] = replicas
 					}
 				}
-                log.Println("getMsg : config is ",m,ip)
+                logger.Debugf("getMsg : config is ",m,ip)
 				return json.Marshal(m)
 			}
 		}
@@ -162,7 +168,7 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 //wait for VBA's to connect initially
 func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 	time.Sleep(time.Duration(to) * time.Second)
-	log.Println("sleep over for vbas")
+	logger.Debugf("sleep over for vbas")
 	cls.M.Lock()
 	for key, cfg := range cls.ConfigMap {
 		serverList := cfg.Servers
@@ -198,7 +204,7 @@ func getServerIndex(cp *config.Context, sr string) int {
 			return s
 		}
 	}
-	log.Println("Server not found.input server is", sr, "all are", cp.C.Servers)
+	logger.Debugf("Server not found.input server is", sr, "all are", cp.C.Servers)
 	//panic("server not found")
 	return -1
 }
@@ -206,7 +212,7 @@ func getServerIndex(cp *config.Context, sr string) int {
 func getIpFromConfig(cp *config.Context, sr string) string {
 	for _,s := range append(cp.C.Servers, cp.C.SecondaryIps...) {
 		if strings.Split(s, ":")[0] == sr {
-			log.Println("Found server in config list", sr, cp.C.Servers)
+			logger.Debugf("Found server in config list", sr, cp.C.Servers)
 			return s
 		}
 	}
@@ -217,7 +223,7 @@ func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
     if cl.W != nil {
         return
     }
-    log.Println("in wait for config", getIpAddrWithPort(cl.Conn))
+    logger.Debugf("in wait for config", getIpAddrWithPort(cl.Conn))
     ch := make(chan string)
     cl.W = ch
     go func() {
@@ -227,7 +233,7 @@ func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
                 return
             }
         case <-time.After((2*HBTIME+5) * time.Second):
-            log.Println("Unable to push config/timeing out.so failing node", getIpAddrWithPort(cl.Conn))
+            logger.Debugf("Unable to push config/timeing out.so failing node", getIpAddrWithPort(cl.Conn))
             cp.HandleServerDown([]string{getIpAddrWithPort(cl.Conn)})
         }
     }()
@@ -257,11 +263,11 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
 
 //push the config to all the VBA's and Moxi
 func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *config.Context) {
-    log.Println("In pushnewconfig")
+    logger.Debugf("In pushnewconfig")
 	ma := make(map[string]int)
 	for _, en := range m {
 		if len(en.VbId) >= 0 {
-            log.Println("before notifying",en.Source)
+            logger.Debugf("before notifying",en.Source)
 			co.Vba.Mu.Lock()
             ip := cp.GetPrimaryIp(en.Source)
             if ip == "" {
@@ -269,11 +275,11 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
                 continue
             }
 			ip = strings.Split(ip, ":")[0]
-            log.Println("before1 notifying", ip)
+            logger.Debugf("before1 notifying", ip)
 			if _, o := ma[ip]; o == false {
 				if val, ok := co.Vba.Ma[ip]; ok {
                     if val.C != nil {
-                        log.Println("notifying",ip)
+                        logger.Debugf("notifying",ip)
 					    val.C <- CHN_NOTIFY_STR
                         if val.W != nil {
                             close(val.W)
@@ -286,8 +292,8 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
 				ma[ip] = 1
 			}
 			co.Vba.Mu.Unlock()
-            log.Println("notified ips", ma)
-            log.Println("conn map is", co.Vba.Ma)
+            logger.Debugf("notified ips", ma)
+            logger.Debugf("conn map is", co.Vba.Ma)
 		}
 	}
     if toMoxi == true {
@@ -318,11 +324,11 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
         }
 	}
 	//connectedServs = c.Servers
-	log.Println("connect servers are", connectedServs)
+	logger.Debugf("connect servers are", connectedServs)
 	capacity := (len(connectedServs) * 100) / len(c.Servers)
 	if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-        //log.Fatal("Not enough server connected, capacity is", capacity)
+        //logger.Fatalf("Not enough server connected, capacity is", capacity)
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets
@@ -333,7 +339,7 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
 func Insert(c net.Conn, ch chan string, co *Client, a string) {
 	/*XXX:close the older connection if exists*/
 	ip := getIpAddr(c)
-	log.Println("insert ip is", ip)
+	logger.Debugf("insert ip is", ip)
 	if a == CLIENT_MOXI {
 		co.Moxi.Mu.Lock()
 		if co.Moxi.Ma[ip] == nil {

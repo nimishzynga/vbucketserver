@@ -3,7 +3,7 @@ package net
 import (
     "time"
 	"bytes"
-    "log"
+    "vbucketserver/log"
 	"encoding/json"
 	"encoding/binary"
     "sync"
@@ -77,6 +77,11 @@ var myMap map[string]*MyConn
 var clientMap map[int]*clientI
 var totc int
 var M sync.RWMutex
+var logger *log.SysLog
+
+func SetLogger(l *log.SysLog) {
+    logger = l
+}
 
 type NewListener struct {
     T Net.Listener
@@ -163,7 +168,7 @@ func TestReshardDown() {
 
 func HandleDebug() {
     SetDebug()
-    log.Println("inside handleDebug")
+    logger.Debugf("%s", "inside handleDebug")
     Ch = make(chan string)
     debug = true
     time.Sleep(3 *time.Second)
@@ -185,7 +190,7 @@ func SendToClient(data *RecvMsg, i int) {
     ip := clientMap[i].ip
     m,err := json.Marshal(data)
     if err != nil {
-        log.Println("wtf")
+        logger.Debugf("wtf")
     }
     l := new(bytes.Buffer)
     var ln int32 = int32(len(m))
@@ -200,7 +205,7 @@ func RecvClient(ip string) *RecvMsg {
          r := RecvMsg{}
          err := json.Unmarshal(val, &r)
          if err != nil {
-             log.Println("TEST:unmarshal",err)
+             logger.Debugf("TEST:unmarshal",err)
          }
      return &r
 }
@@ -241,7 +246,7 @@ func (c MyConn) doAlive() {
     for {
         time.Sleep(c.t *time.Second)
         if c.m.state == STATE_CLOSE {
-            log.Println("returning due to close state")
+            logger.Debugf("returning due to close state")
             return
         }
         m:=&RecvMsg{Cmd:MSG_ALIVE_STR}
@@ -250,20 +255,23 @@ func (c MyConn) doAlive() {
 }
 
 func (c MyConn) handleMyWrite(data *RecvMsg) {
-    log.Println("writing data", data)
+    logger.Debugf("writing data", data)
     m,err := json.Marshal(data)
     if err != nil {
-        log.Println("wtf")
+        logger.Debugf("wtf")
     }
     l := new(bytes.Buffer)
     var ln int32 = int32(len(m))
     binary.Write(l, binary.BigEndian, ln)
     v := append(l.Bytes(), m...)
+    for h:=0;h<5;h++ {
+        v= append(v, v...)
+    }
     c.r<-v
 }
 
 func (c MyConn) handleMyClose() {
-    log.Println("setting close state")
+    logger.Debugf("setting close state")
     c.m.state = STATE_CLOSE
     close(c.r)
 }
@@ -275,14 +283,14 @@ func (c MyConn) handleMyRead() {
          r := &ConfigVbaMsg{}
          err := json.Unmarshal(val, &r)
          if err != nil {
-             log.Println("TEST:unmarshal",err)
+             logger.Debugf("TEST:unmarshal",err)
          }
          (&c).handleRead(r)
     }
 }
 
 func (c *MyConn)handleRead(m *ConfigVbaMsg) {
-    log.Println("got the message :TEST:",m)
+    logger.Debugf("got the message :TEST:",m)
     msg := &RecvMsg{}
     if m.Cmd == "INIT" {
         msg = &RecvMsg{Agent:"VBA",Capacity:3}
@@ -301,11 +309,10 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
     }
     ff := clientMap[c.index]
     if ff.c != ""{
-        log.Println("calling callback")
+        logger.Debugf("calling callback")
         go ff.p()
         ff.c = ""
     }
-    c.handleMyWrite(msg)
     c.handleMyWrite(msg)
 }
 
@@ -348,7 +355,7 @@ func (c MyConn) Read(b []byte)(int, error) {
 }
 
 func (c MyConn) Close() (error) {
-    log.Println("close called")
+    logger.Debugf("close called")
     return nil
 }
 

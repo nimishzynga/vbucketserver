@@ -132,6 +132,10 @@ type FailureEntry struct {
     vb             Vblist
 }
 
+type Params struct {
+    LogLevel int
+}
+
 func NewContext() *Context {
     ct := &Context{
         SecondaryIpMap : make(map[int]int),

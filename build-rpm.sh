@@ -5,7 +5,9 @@ main.go    \
 server     \
 config     \
 scripts   \
-net
+net       \
+log       \
+goweb
 "
 vbs_specfile=vbs.spec
 vbs_version=`sed -n 's/^Version:[ ]*//p' $vbs_specfile`

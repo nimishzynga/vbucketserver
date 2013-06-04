@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"vbucketserver/config"
     "vbucketserver/net"
     "time"
@@ -22,7 +21,7 @@ func (gc *GenericClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) b
 }
 
 func (gc *GenericClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bool {
-    log.Println("inside handleAlive")
+    logger.Debugf("inside handleAlive")
     if m.Cmd == MSG_ALIVE_STR {
 		return true
 	}
@@ -102,7 +101,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
     ip := getIpAddr(vc.conn)
 	cp := cls.GetContext(ip)
 	if cp == nil {
-		log.Println("Not able to find context for", ip)
+		logger.Debugf("Not able to find context for", ip)
 		return false
 	}
 	index := getServerIndex(cp, ip)
@@ -113,10 +112,10 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
             cp.HandleServerAlive([]string{ip}, nil, false)
 	        index = getServerIndex(cp, ip)
         } else {
-            log.Println("Server not in list", ip)
+            logger.Debugf("Server not in list", ip)
             return false
         }*/
-        log.Println("Server not in list", ip)
+        logger.Debugf("Server not in list", ip)
         return false
     }
 	si := cp.S[index]
@@ -147,26 +146,26 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
     if m.Status == MSG_OK_STR {
         if m.Cmd == MSG_CONFIG_STR {
             cp := cls.GetContext(getIpAddr(vc.conn))
-            log.Println("before contxt got ok from", getIpAddr(vc.conn))
+            logger.Debugf("before contxt got ok from", getIpAddr(vc.conn))
             if cp == nil {
-                log.Println("Not able to find context for", getIpAddr(vc.conn))
+                logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
                 return false
             }
-            log.Println("got ok from", getIpAddr(vc.conn))
+            logger.Debugf("got ok from", getIpAddr(vc.conn))
             ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-            log.Println("ip list is", ip)
+            logger.Debugf("ip list is", ip)
             if len(ip) > 0 {
                 cp.InfoMutex.Lock()
-                log.Println("ip list is 2", ip)
+                logger.Debugf("ip list is 2", ip)
                 if cp.NotifyServers == nil {
                     cp.NotifyServers = make(map[string]int)
-                    log.Println("notify map is", cp.NotifyServers)
+                    logger.Debugf("notify map is", cp.NotifyServers)
                     addMap(cp.NotifyServers, ip, cp)
-                    log.Println("notify map is after", cp.NotifyServers)
+                    logger.Debugf("notify map is after", cp.NotifyServers)
                     go func() {
                         time.Sleep(AGGREGATE_TIME * time.Second)
                         PushNewConfigToVBA(co, cp.NotifyServers, cp)
-                        log.Println("came up from sleep")
+                        logger.Debugf("came up from sleep")
                         cp.NotifyServers = nil
                     }()
                 } else {
@@ -177,10 +176,10 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
             return true
         }
         if m.Cmd == MSG_TRANSFER_STR {
-            log.Println("calling HandleTransferDone")
+            logger.Debugf("calling HandleTransferDone")
             cp := cls.GetContext(getIpAddr(vc.conn))
             if cp == nil {
-                log.Println("Not able to find context for", getIpAddr(vc.conn))
+                logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
                 return false
             }
             changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
@@ -190,9 +189,9 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
         }
     }
     if m.Status == MSG_ERROR_STR {
-        log.Println("VBA ERROR:", m.Detail)
+        logger.Debugf("VBA ERROR:", m.Detail)
         //nuke the bastard
-        log.Println("Server failure: since vba reported it", getIpAddr(vc.conn),
+        logger.Debugf("Server failure: since vba reported it", getIpAddr(vc.conn),
             m.Detail)
         vc.HandleFail(m, cls, co)
         return true
@@ -203,7 +202,7 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
-		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
     fi := &config.FailureInfo{}
@@ -213,7 +212,7 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
         fi = &cp.RepFi
     }
     if getServerIndex(cp, getIpAddr(vc.conn)) == -1 {
-        log.Println("invalid server reporting failure", getIpAddr(vc.conn))
+        logger.Debugf("invalid server reporting failure", getIpAddr(vc.conn))
         return false
     }
     fi.M.Lock()
@@ -222,7 +221,7 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
         Dst : m.Destination,
     }
     fi.F = append(fi.F, entry)
-    log.Println("Added the failed node entry", entry)
+    logger.Debugf("Added the failed node entry", entry)
     fi.M.Unlock()
 	return true
 }
@@ -230,7 +229,7 @@ func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) boo
 func (vc *VbaClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Client) bool {
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
-		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
     var dvi config.DeadVbucketInfo
@@ -260,10 +259,10 @@ func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bo
 }
 
 func (vc *VbaClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
-	log.Println("inside handleCheckPoint")
+	logger.Debugf("inside handleCheckPoint")
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
-		log.Println("Not able to find context for", getIpAddr(vc.conn))
+		logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
 		return false
 	}
 	cp.HandleCheckPoint(getIpAddr(vc.conn), m.Vbuckets, m.CheckPoints)

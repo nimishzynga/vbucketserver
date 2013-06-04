@@ -15,9 +15,6 @@ Distribution:   Vbs
 Vbucketserver component
 
 %build
-cd %{_topdir}
-export GOPATH=`pwd`
-go get code.google.com/p/goweb/goweb
 cd %{_topdir}/src/%{_package}
 go build
 
