@@ -374,6 +374,9 @@ func (cp *Context) checkFail(ser string) bool {
 
 func (cp *Context) getRestoreVBuckets(ip string) []int {
     index := cp.getServerIndex(cp.GetPrimaryIp(ip))
+    if index == -1 {
+        return nil
+    }
     return cp.S[index].ReplicaVbuckets
 }
 
