@@ -500,6 +500,10 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
             }
         }()
         ser := cp.findFreeServer(vbucket[1], failedIndex, allNewIndex)
+        if ser == -1 {
+            logger.Errorf("Not enough capacity in destination to transfer vbucket", allNewIndex)
+            continue
+        }
 		//add the new transfer entry
 		logger.Debugf("server index are", vbucket[0], ser, serverList)
 		key := serverList[vbucket[0]] + serverList[ser]
@@ -703,7 +707,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 				}
 
 				var j int
-				for j = 0; j < len(vbucket); j++ {
+				for j = 1; j < len(vbucket); j++ {
 					if cp.SameServer(vbucket[j], ser) {
 						logger.Debugf("vbucket", vbucket, "j is", j, "ser is", ser)
                         index := cp.getTransferIndex(ser)

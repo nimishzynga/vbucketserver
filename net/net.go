@@ -136,6 +136,34 @@ func ReplicationFail() {
         })
 }
 
+func AllDc() {
+        register(1, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            c := getConn(1)
+            c.handleMyClose()
+        })
+        register(2, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            c := getConn(2)
+            c.handleMyClose()
+        })
+        register(3, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            c := getConn(3)
+            c.handleMyClose()
+        })
+        register(4, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            c := getConn(4)
+            c.handleMyClose()
+        })
+        register(0, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            c := getConn(0)
+            c.handleMyClose()
+        })
+}
+
 func TestDiskFailure() {
     register(2, "CONFIG", func() {
         time.Sleep(5*time.Second)
@@ -179,11 +207,12 @@ func HandleDebug() {
     createClient(CLIENT3)
     createClient(CLIENT4)
     createClient(CLIENT5)
-    createClient(CLIENT6)
+    //createClient(CLIENT6)
     time.Sleep(3 *time.Second)
-    ReplicationFail()
+    //ReplicationFail()
    //TestDiskFailure()
    //TestAliveFail()
+    AllDc()
 }
 
 func SendToClient(data *RecvMsg, i int) {
@@ -264,9 +293,6 @@ func (c MyConn) handleMyWrite(data *RecvMsg) {
     var ln int32 = int32(len(m))
     binary.Write(l, binary.BigEndian, ln)
     v := append(l.Bytes(), m...)
-    for h:=0;h<5;h++ {
-        v= append(v, v...)
-    }
     c.r<-v
 }
 
