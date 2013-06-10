@@ -227,6 +227,10 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 							logger.Warnf("Data size is more", length, fullData)
 							return
 						}
+                        if length <= 0 {
+							logger.Warnf("Data size is negative", length, fullData)
+							return
+                        }
 						fullData = fullData[HEADER_SIZE:]
 						n -= HEADER_SIZE
 					} else {
