@@ -138,7 +138,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 		conn.Write(l.Bytes())
 		_, err := conn.Write(m)
 		if err != nil {
-			logger.Warnf("Error write", err.Error())
+			logger.Warnf("Error in write", err.Error(), " connection ",getIpAddr(conn))
 			return
 		}
 	}
@@ -192,7 +192,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 	for {
 		select {
         case err := <-c1:
-			logger.Warnf("error on socket", err)
+            logger.Warnf("error on socket:", err, getIpAddr(conn))
 			return
 		case data = <-c2:
 			currTimeouts = 0

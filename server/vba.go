@@ -67,6 +67,7 @@ func (mc *MoxiClient) HandleInit(ch chan string, cls *config.Cluster, co *Client
 	}
 	co.Cond.L.Unlock()
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
+        logger.Infof("Sending config to moxi ", getIpAddr(mc.conn))
 		mc.ch <- m
 		return true
 	}
@@ -75,6 +76,7 @@ func (mc *MoxiClient) HandleInit(ch chan string, cls *config.Cluster, co *Client
 
 func (mc *MoxiClient) HandleUpdateConfig(cls *config.Cluster) bool {
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_MOXI, getIpAddr(mc.conn)); err == nil {
+        logger.Infof("Sending config to moxi ", getIpAddr(mc.conn))
 		mc.ch <- m
 		return true
 	}
@@ -128,6 +130,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
         return true
     }
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, ip); err == nil {
+        logger.Infof("Sending config to vba ", getIpAddr(vc.conn))
 		vc.ch <- m
 		return true
 	}
@@ -136,6 +139,7 @@ func (vc *VbaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client,
 
 func (vc *VbaClient) HandleUpdateConfig(cls *config.Cluster) bool {
 	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_VBA, getIpAddr(vc.conn)); err == nil {
+        logger.Infof("Sending config to vba ", getIpAddr(vc.conn))
 		vc.ch <- m
 		return true
 	}
@@ -200,6 +204,7 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
 }
 
 func (vc *VbaClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
+    logger.Infof("In Handle fail: failure due to ", m.Cmd)
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
 		logger.Debugf("Not able to find context for", getIpAddr(vc.conn))

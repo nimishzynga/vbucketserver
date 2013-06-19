@@ -64,6 +64,7 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 
 func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) {
 	if c.IsPost() || c.IsPut() {
+        logger.Infof("ServerDown api called")
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			logger.Warnf("got error", err)
@@ -80,7 +81,7 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 			logger.Debugf("Context not found for", si.Server)
 			return
 		}
-		logger.Debugf("downserver is", si.Server)
+		logger.Infof("Downserver is", si.Server)
 		//TODO:Need to fix here
 		ok, mp := cfgctx.HandleServerDown(si.Server)
 		if ok {
@@ -91,6 +92,7 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 
 func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client) {
 	if c.IsPost() || c.IsPut() {
+        logger.Infof("ReshardDown api called")
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			logger.Warnf("got error", err)
@@ -112,7 +114,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			c.WriteResponse(data, 200)
 			return
 		}
-		logger.Debugf("downserver is", si.Server)
+		logger.Infof("reshard server is", si.Server)
 		//TODO:Need to fix here
 		ok, mp := cfgctx.HandleReshardDown(si.Server, si.Capacity)
 		if ok {
@@ -122,8 +124,8 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 }
 
 func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client) {
-	logger.Debugf("Adding new server")
 	if c.IsPost() || c.IsPut() {
+	    logger.Infof("ServerALive api called")
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			logger.Warnf("got error", err)
@@ -147,6 +149,7 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 				}
 			}
 		}
+        logger.Infof("added server is", si.Server)
         if cfgctx.SetReshard() == false {
 			data := "Reshard is going on.Please try later"
 			c.WriteResponse(data, 200)

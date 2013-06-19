@@ -15,6 +15,9 @@ import (
 	"fmt"
 	"io"
 	stdlib "log"
+    "runtime"
+    "strings"
+    "strconv"
 )
 
 const (
@@ -41,14 +44,15 @@ var levels = []string{FATAL, ERROR, WARN, DEBUG, INFO}
 
 type SysLog struct {
 	logger *stdlib.Logger
+    flag int
 }
 
 func (sl *SysLog) Flags() int {
-	return sl.logger.Flags()
+	return sl.flag
 }
 
 func NewSysLog(out io.Writer, prefix string, flag int) *SysLog {
-	return &SysLog{stdlib.New(out, prefix, flag)}
+	return &SysLog{stdlib.New(out, prefix, 3), flag}
 }
 
 // NOTE - the semantics here are different from go's logger.Fatal
@@ -115,9 +119,11 @@ func (sl *SysLog) Infof(v ...interface{}) {
 }
 
 func join2(level, msg string) string {
-	n := len(msg) + len2
+    l := GetFileInfo()
+	n := len(msg) + len2 + len(l)
 	j := make([]byte, n)
 	o := copy(j, level)
+    o += copy(j[o:], l)
 	o += copy(j[o:], delim)
 	copy(j[o:], msg)
 	return string(j)
@@ -132,3 +138,11 @@ func join3(level, meta, msg string) string {
 	copy(j[o:], msg)
 	return string(j)
 }
+
+func GetFileInfo() string {
+    pc, file, line, _ := runtime.Caller(3)
+    fileName := strings.Split(file, "/")
+    val := fileName[len(fileName)-2] + "/" + fileName[len(fileName)-1]
+    return " " + val + ":" + strconv.Itoa(line) + ":" + runtime.FuncForPC(pc).Name()
+}
+

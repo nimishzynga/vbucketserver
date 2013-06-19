@@ -22,8 +22,8 @@ func main() {
 
 	cls := config.NewCluster()
 	h := server.NewClient()
-	SetupHandlers(cls, h)
     createLogger(*logLevel)
+	SetupHandlers(cls, h)
 
     if *debug == "true" {
         go net.HandleDebug()
@@ -32,6 +32,7 @@ func main() {
 	    go server.HandleTcp(h, cls, *addr, *cfg)
     }
 
+    logger.Infof("=======STARTING VBS========")
 	go func() {
         http.ListenAndServe(":8080", nil)
 	}()

@@ -248,6 +248,7 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
         ip = strings.Split(ip, ":")[0]
         if val, ok := co.Vba.Ma[ip]; ok {
             if val.C != nil {
+                logger.Infof("Sending config to vba ",ip)
                 val.C <- CHN_NOTIFY_STR
                 if val.W != nil {
                     close(val.W)
@@ -267,7 +268,6 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
 	ma := make(map[string]int)
 	for _, en := range m {
 		if len(en.VbId) >= 0 {
-            logger.Debugf("before notifying",en.Source)
 			co.Vba.Mu.Lock()
             ip := cp.GetPrimaryIp(en.Source)
             if ip == "" {
@@ -275,11 +275,10 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
                 continue
             }
 			ip = strings.Split(ip, ":")[0]
-            logger.Debugf("before1 notifying", ip)
 			if _, o := ma[ip]; o == false {
 				if val, ok := co.Vba.Ma[ip]; ok {
                     if val.C != nil {
-                        logger.Debugf("notifying",ip)
+                        logger.Infof("Sending config to vba ",ip)
 					    val.C <- CHN_NOTIFY_STR
                         if val.W != nil {
                             close(val.W)
@@ -298,7 +297,8 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
 	}
     if toMoxi == true {
         co.Moxi.Mu.Lock()
-        for _, val := range co.Moxi.Ma {
+        for ip, val := range co.Moxi.Ma {
+            logger.Infof("Sending config to moxi", ip)
             val.C <- CHN_NOTIFY_STR
         }
         co.Moxi.Mu.Unlock()
@@ -339,7 +339,7 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
 func Insert(c net.Conn, ch chan string, co *Client, a string) {
 	/*XXX:close the older connection if exists*/
 	ip := getIpAddr(c)
-	logger.Debugf("insert ip is", ip)
+	logger.Infof("client connected ", ip)
 	if a == CLIENT_MOXI {
 		co.Moxi.Mu.Lock()
 		if co.Moxi.Ma[ip] == nil {

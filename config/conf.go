@@ -94,7 +94,6 @@ func (cp *Context) getPrimaryIndex(i int) int {
 }
 
 func (cp *Context) getIndex(s int, arr []VbucketCountBoth, isactive bool) int {
-	logger.Debugf("index is", s)
 	pri := arr[s].primary
 	sec := arr[s].secondary
 	if isactive {
@@ -142,7 +141,6 @@ func (cp *Context) generatevBucketMap(c *Config) (*[][]int, *[]uint32, bool) {
 	//distribute the active vbuckets
 	for i := 0; i < int(c.Vbuckets); i++ {
 		s := i / maxActive
-		logger.Debugf("s is", s)
 		confMap[i][0] = cp.getIndex(s, countVbuckets, true)
 		capacityMap[s]++
 		//distribute the replicas
@@ -381,6 +379,7 @@ func (cp *Context) getRestoreVBuckets(ip string) []int {
 }
 
 func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
+    logger.Warnf("FAILING NODE:", ser)
 	cp.M.Lock()
 	dvil := make([]DeadVbucketInfo, len(ser))
 	for i := range ser {
@@ -557,7 +556,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 			allFailedIndex = []int{ser}
 		}
 		if ser == -1 {
-			logger.Warnf("Server not in list", s)
+			logger.Warnf("Dead server ",dvil[i].Server, " is not in server list")
 			return false, changeVbaMap
 		} else if serverDown == false {
 			d := cp.getServerVbuckets(ser)
@@ -954,7 +953,8 @@ func (cp *Context) HandleCapacityUpdate(ci CapacityUpdateInfo) {
 func (cls *Cluster) GetContextFromClusterName(clusterName string) *Context {
 	cp, ok := cls.ContextMap[clusterName]
 	if ok == false {
-		logger.Warnf("cluster not in cluster name list", clusterName)
+        logger.Warnf("cluster:", clusterName, "not in cluster name list", cls.ContextMap,
+            "Invalid cluster name in client API")
 		return nil
 	}
 	return cp
@@ -1000,7 +1000,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 		}
 
         if cp.UpdateRestoreVbuckets(ip, vb) == false {
-            logger.Warnf("Restore vbucket: vbucket does not belong",vb,ip)
+            logger.Warnf("Restore vbucket: vbucket", vb, "does not belong to ",ip)
             continue
         }
 
@@ -1025,7 +1025,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 				oldVbaMap[key] = oldEntry
 			}
 		} else {
-			logger.Warnf("key did not find in the server", key)
+			logger.Warnf("No replication key for", key)
 		}
 
 		key = serverList[ms] + serverList[src]
@@ -1074,7 +1074,6 @@ func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
         }()
     }
     if len(NewlyFailedNode) > 0 {
-        logger.Warnf("failing node", NewlyFailedNode)
         return cp.HandleServerDown(NewlyFailedNode)
     }
     return false,nil
@@ -1146,7 +1145,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                 }
             }
             if found == false {
-                logger.Warnf("vbucket not found for transfer", vb, oldEntry.Transfer_VbId)
+                logger.Warnf("vbucket ", vb, " not found for transfer", oldEntry.Transfer_VbId)
                 return false
             }
             if len(oldEntry.VbId) == 0 && len(oldEntry.Transfer_VbId) == 0 {
@@ -1264,12 +1263,12 @@ func (cls *Cluster) GetContext(ip string) *Context {
 	ip = strings.Split(ip, ":")[0]
 	clusterName, ok := cls.IpMap[ip]
 	if ok == false {
-		logger.Warnf("Ip not in cluster name list", ip, cls)
+		logger.Warnf("Ip ", ip, " not in cluster", cls)
 		return nil
 	}
 	cp, ok := cls.ContextMap[clusterName]
 	if ok == false {
-		logger.Warnf("cluster not in cluster name list", clusterName)
+		logger.Warnf("Invalid cluster", clusterName)
 		return nil
 	}
 	return cp
