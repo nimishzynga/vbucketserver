@@ -138,7 +138,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 		conn.Write(l.Bytes())
 		_, err := conn.Write(m)
 		if err != nil {
-			logger.Warnf("Error in write", err.Error(), " connection ",getIpAddr(conn))
+            logger.Warnf("Error in write:", err.Error(), " connection ",getIpAddr(conn))
 			return
 		}
 	}
@@ -154,7 +154,6 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 	var err error
 
 	defer func() {
-		conn.Close()
 		logger.Infof("disconnecting client", getIpAddr(conn))
         if vc != nil {
             var cp *config.Context = nil
@@ -167,6 +166,7 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
             RemoveConn(conn, co, vc.ClientType(), cp)
         }
         close(c)
+		conn.Close()
 	}()
 
     m := &RecvMsg{}

@@ -120,6 +120,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
 		}
+	    c.WriteResponse("SUCCESS", 200)
 	}
 }
 
@@ -161,6 +162,7 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
 		}
+	    c.WriteResponse("SUCCESS", 200)
 	}
 }
 

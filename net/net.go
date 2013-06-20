@@ -9,6 +9,7 @@ import (
     "sync"
     "errors"
     "vbucketserver/config"
+    "sort"
 Net "net"
 )
 
@@ -139,6 +140,7 @@ func ReplicationFail() {
 func AllDc() {
         register(1, "CONFIG", func() {
             time.Sleep(4*time.Second)
+            logger.Debugf(addVbucket.vbList)
             c := getConn(1)
             c.handleMyClose()
         })
@@ -170,6 +172,19 @@ func TestDiskFailure() {
         c := getConn(1)
         SendToClient(Dead(c.m.active[3:], nil), 1)
     })
+}
+
+func TestConfig() {
+        register(1, "CONFIG", func() {
+            time.Sleep(4*time.Second)
+            sort.Ints(addVbucket.vbList)
+            for i:=0; i<2048;i++ {
+                if addVbucket.vbList[i] != i {
+                    logger.Errorf("not received", i)
+                }
+            }
+            logger.Errorf(addVbucket.vbList)
+        })
 }
 
 func TestAliveFail() {
@@ -209,10 +224,11 @@ func HandleDebug() {
     createClient(CLIENT5)
     //createClient(CLIENT6)
     time.Sleep(3 *time.Second)
-    ReplicationFail()
+    //ReplicationFail()
    //TestDiskFailure()
    //TestAliveFail()
-    AllDc()
+    //AllDc()
+    TestConfig()
 }
 
 func SendToClient(data *RecvMsg, i int) {
@@ -324,6 +340,10 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
         for _,g := range m.Data {
             c.m.active = append(c.m.active, g.VbId...)
         }
+       addVbucket.l.Lock()
+       addVbucket.vbList = append(addVbucket.vbList, c.m.active...)
+       addVbucket.l.Unlock()
+
         c.t = time.Duration(m.HeartBeatTime)
         msg = &RecvMsg{Status: MSG_OK_STR, Cmd: MSG_CONFIG_STR}
         if m.RestoreCheckPoints != nil {
@@ -349,6 +369,12 @@ type MetaData struct {
 }
 
 type Conn Net.Conn
+type addVbuc struct {
+    l sync.RWMutex
+    vbList []int
+}
+
+var addVbucket addVbuc
 
 type MyConn struct {
     w,r chan []byte

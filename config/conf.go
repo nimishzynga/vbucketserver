@@ -15,6 +15,7 @@ const (
 	RESHARD_CONT_STR = "In progress"
 	RESHARD_DONE_STR = "No resharding"
     FAIL_COUNT       = 3
+    LOCALHOST        = "127.0.0.1:11211"
 )
 
 var logger *log.SysLog
@@ -856,8 +857,16 @@ func (cp *Context) AddServerInfo(priIps []string, secIps []string) {
 func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (bool, map[string]VbaEntry) {
 	//cp.M.Lock()
 	vbuckets := cp.C.Vbuckets
-	servers := len(cp.C.Servers) + len(ser)
-	vbucketsPerServer := len(ser) * ((int(vbuckets) / (servers)) / len(cp.C.Servers))
+    totServers := len(cp.C.Servers)
+    //count for the dead ips in the list and subtract from the total servers
+    for _,val := range cp.C.Servers {
+        if val == DEAD_NODE_IP {
+            totServers--
+        }
+    }
+	servers := totServers + len(ser)
+    //number of vbuckets per server
+	vbucketsPerServer := len(ser) * ((int(vbuckets) / (servers)) / totServers)
 	dvil := make([]DeadVbucketInfo, len(cp.C.Servers))
 	activeVbMap := make(map[int]int)
 	for i, serv := range cp.C.Servers {
@@ -1083,7 +1092,10 @@ func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
 func (cp *Context) DecideServer(f []FailureEntry) []string {
 	failedServer := []string{}
 	failCount := make(map[string]map[string]int)
-	for _, en := range f {
+    for _, en := range f {
+        if en.Dst == LOCALHOST {
+            en.Dst = en.Src
+        }
         ip := cp.GetPrimaryIp(en.Dst)
         if ip == "" {
             logger.Debugf("Server to fail:Not found", en.Dst)
