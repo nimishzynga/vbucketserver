@@ -98,6 +98,25 @@ func (mc *MoxiClient) HandleUpdateConfig(cls *config.Cluster) bool {
 	return false
 }
 
+func (mc *MoxiClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
+    logger.Infof("In Handle fail: Moxi failure due to ", m.Cmd)
+	cp := cls.GetContext(getIpAddr(mc.conn))
+	if cp == nil {
+		logger.Debugf("Not able to find context for", getIpAddr(mc.conn))
+		return false
+	}
+    fi := &cp.MoxiFi
+    fi.M.Lock()
+    entry := config.FailureEntry {
+        Src : getIpAddr(mc.conn),
+        Dst : m.Destination,
+    }
+    fi.F = append(fi.F, entry)
+    logger.Debugf("Added the failed node entry", entry)
+    fi.M.Unlock()
+	return true
+}
+
 type VbaClient struct {
 	conn net.Conn
 	ch   chan []byte

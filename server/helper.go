@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 	"vbucketserver/config"
+    "strconv"
 )
 
 var logger *log.SysLog
@@ -90,8 +91,24 @@ func validateConfig(cls *config.Cluster) error {
 		if cfg.Replica < 0 || cfg.Capacity <= 0 || len(cfg.Servers) == 0 {
 			return errors.New("Error in either replica, capacity or servers in Config")
 		}
+        for _,server := range append(cfg.Servers, cfg.SecondaryIps...) {
+            if validateIp(server) == false {
+			    return errors.New("Error in server ip/port in Config")
+            }
+        }
 	}
 	return nil
+}
+
+func validateIp(ip string) bool {
+    val := strings.Split(ip, ":")
+    if len(val) < 2 {
+        return false
+    }
+    if _,err := strconv.Atoi(val[1]); err != nil {
+        return false
+    }
+    return true
 }
 
 //return the message structure for a message type
@@ -131,42 +148,11 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
                     if cp.SameServer(s, d) {
 						m.Data = append(m.Data, entry)
                     }
-                   /* 
-					if strings.Split(entry.Source, ":")[0] == ip {
-						if index := getServerIndex(cp, ip); index != -1 {
-							if len(cp.C.SecondaryIps) > index {
-								if secondIp := cp.C.SecondaryIps[index]; secondIp != "" {
-									entry.Source = cp.C.SecondaryIps[index]
-								}
-							}
-						} else {
-                            if index := getServerIndex(cp, entry.Source); index != -1 {
-								if len(cp.C.SecondaryIps) > index {
-									if secondIp := cp.C.SecondaryIps[index]; secondIp != "" {
-						
-                        
-                        
-                        
-                        }
-                        /*
-						dest := strings.Split(entry.Destination, ":")[0]
-						if dest != "" {
-							if index := getServerIndex(cp, dest); index != -1 {
-								if len(cp.C.SecondaryIps) > index {
-									if secondIp := cp.C.SecondaryIps[index]; secondIp != "" {
-										entry.Destination = cp.C.SecondaryIps[index]
-									}
-								}
-							}
-						}
-					}*/
 				}
 				if index := getServerIndex(cp, ip); index != -1 {
 					replicas := cp.S[index]
 					if len(replicas.ReplicaVbuckets) > 0 {
 						m.RestoreCheckPoints = append(m.RestoreCheckPoints, replicas.ReplicaVbuckets...)
-						//replicas.ReplicaVbuckets = replicas.ReplicaVbuckets[:0]
-                        //cp.S[index] = replicas
 					}
 				}
                 logger.Debugf("getMsg : config is ",m,ip)
@@ -343,7 +329,8 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
 	capacity := (len(connectedServs) * 100) / len(c.Servers)
 	if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-        //logger.Fatalf("Not enough server connected, capacity is", capacity)
+        logger.Fatalf("Not enough server connected, capacity is", capacity)
+        os.Exit(0)
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets

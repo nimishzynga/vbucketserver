@@ -39,14 +39,14 @@ start () {
       echo "$pidbg" > "$PIDFILE"
     else
       cmd='/bin/false'
+      rm -f $PIDFILE
     fi
 	action $"Starting $prog: " $cmd
 }
 stop () {
         local pid
-
-	echo -n $"Stopping $progllproc: "
 	killproc -p "$PIDFILE" vbs.sh
+	echo "Stopping $prog: "
 }
 
 status() {

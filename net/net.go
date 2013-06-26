@@ -115,6 +115,11 @@ func RpFail(ip string) *RecvMsg {
     return m
 }
 
+func Fail(ip string) *RecvMsg {
+    m := &RecvMsg{Cmd:MSG_FAIL_STR , Destination:ip}
+    return m
+}
+
 func Dead(a []int, r []int) *RecvMsg {
     m := &RecvMsg{Cmd:"DEAD_VBUCKETS" , Vbuckets:config.Vblist{Active:a,},}
     return m
@@ -134,28 +139,28 @@ func getConn(i int) (*MyConn) {
 }
 
 func ReplicationFail() {
-        register(1, "CONFIG", func() {
+        register(4, "CONFIG", func() {
             time.Sleep(4*time.Second)
-            SendToClient(RpFail(getIp(4)), 1)
-            c := getConn(1)
-            c.handleMyClose()
-            time.Sleep(10*time.Second)
-            createClient(CLIENT2)
+            SendToClient(Fail("127.0.0.1:11211"), 4)
         })
         register(2, "CONFIG", func() {
             time.Sleep(5*time.Second)
-            SendToClient(RpFail(getIp(4)), 2)
+            SendToClient(Fail(getIp(4)), 2)
         })
+        /*
         register(3, "CONFIG", func() {
             time.Sleep(6*time.Second)
+            SendToClient(Fail(getIp(4)), 3)
+            time.Sleep(2*time.Second)
             SendToClient(RpFail(getIp(4)), 3)
         })
+        */
 }
 
 func AllDc() {
         register(1, "CONFIG", func() {
             time.Sleep(4*time.Second)
-            logger.Debugf(addVbucket.vbList)
+            //logger.Debugf(addVbucket.vbList)
             c := getConn(1)
             c.handleMyClose()
         })
@@ -239,11 +244,11 @@ func HandleDebug() {
     createClient(CLIENT5)
     //createClient(CLIENT6)
     time.Sleep(3 *time.Second)
-    //ReplicationFail()
+    ReplicationFail()
    //TestDiskFailure()
    //TestAliveFail()
     //AllDc()
-    TestConfig()
+   // TestConfig()
 }
 
 func SendToClient(data *RecvMsg, i int) {

@@ -238,6 +238,7 @@ func HandleLogger(c *goweb.Context, cls *config.Cluster) {
             logger.Warnf("got error", err)
             return
         }
+        logger.Infof("Changing log level to ", si.LogLevel)
         createLogger(si.LogLevel)
     }
 }

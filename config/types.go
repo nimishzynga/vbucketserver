@@ -134,6 +134,7 @@ type Context struct {
     NotifyServers   map[string]int
     NodeFi          FailureInfo
     RepFi           FailureInfo
+    MoxiFi          FailureInfo
     T               time.Time
     Cbi             *callBackInfo
     ReInfo          ReshardInfo

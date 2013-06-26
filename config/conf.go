@@ -29,8 +29,11 @@ const (
 	MAX_FAIL_TIME    = 30
 	RESHARD_CONT_STR = "In progress"
 	RESHARD_DONE_STR = "No resharding"
-    FAIL_COUNT       = 3
     LOCALHOST        = "127.0.0.1:11211"
+    MOXI_FAIL_WEIGHT = 1
+    REP_FAIL_WEIGHT  = 1
+    NODE_FAIL_WEIGHT = 3
+    FAIL_WEIGHT      = 3*NODE_FAIL_WEIGHT
 )
 
 var logger *log.SysLog
@@ -399,10 +402,6 @@ func (cp *Context) HandleServerDown(ser []string) (bool, map[string]VbaEntry) {
 	cp.M.Lock()
 	dvil := make([]DeadVbucketInfo, len(ser))
 	for i := range ser {
-		/*
-		   if cp.checkFail(ser[i]) == false {
-		       continue
-		   }*/
 		dvil[i] = *cp.getServerVbuckets(cp.getServerIndex(ser[i]))
         restoreVbs := cp.getRestoreVBuckets(ser[i])
         dvil[i].Replica = append(dvil[i].Replica, restoreVbs...)
@@ -1077,25 +1076,33 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
     fi := &cp.NodeFi
     fi.M.Lock()
-    NodeFailed := cp.DecideServer(fi.F)
+    NodeFailed := cp.DecideServer(fi.F, NODE_FAIL_WEIGHT)
     fi.F = fi.F[:0]
     fi.M.Unlock()
     fi = &cp.RepFi
     fi.M.Lock()
-    RepFailed := cp.DecideServer(fi.F)
+    RepFailed := cp.DecideServer(fi.F, REP_FAIL_WEIGHT)
     fi.F = fi.F[:0]
     fi.M.Unlock()
-    NewlyFailedNode := NodeFailed
-    for _, g := range RepFailed {
-        func() {
-            k := ""
-            for _, k = range NewlyFailedNode {
-                if g == k {
-                    return
-                }
-            }
-            NewlyFailedNode = append(NewlyFailedNode, g)
-        }()
+    fi = &cp.MoxiFi
+    fi.M.Lock()
+    MoxiFailed := cp.DecideServer(fi.F, MOXI_FAIL_WEIGHT)
+    fi.F = fi.F[:0]
+    fi.M.Unlock()
+
+    for node,weight := range RepFailed {
+        w := NodeFailed[node]
+        NodeFailed[node] = w + weight
+    }
+    for node,weight := range MoxiFailed {
+        w := NodeFailed[node]
+        NodeFailed[node] = w + weight
+    }
+    NewlyFailedNode := []string{}
+    for node,weight := range NodeFailed {
+        if weight >= FAIL_WEIGHT {
+            NewlyFailedNode = append(NewlyFailedNode, node)
+        }
     }
     if len(NewlyFailedNode) > 0 {
         return cp.HandleServerDown(NewlyFailedNode)
@@ -1104,11 +1111,13 @@ func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
 }
 
 //each contains an entry for failure
-func (cp *Context) DecideServer(f []FailureEntry) []string {
-	failedServer := []string{}
+func (cp *Context) DecideServer(f []FailureEntry, failWeight int) map[string]int {
+	failedServer := make(map[string]int)
 	failCount := make(map[string]map[string]int)
     for _, en := range f {
+        weight := failWeight
         if en.Dst == LOCALHOST {
+            weight = 2*weight
             en.Dst = en.Src
         }
         ip := cp.GetPrimaryIp(en.Dst)
@@ -1120,23 +1129,17 @@ func (cp *Context) DecideServer(f []FailureEntry) []string {
         if failCount[ip] == nil {
             failCount[ip]= make(map[string]int)
         }
-		failCount[ip][en.Src] = 1
+		failCount[ip][en.Src] = weight
 	}
 	for key, val := range failCount {
-		if len(val) >= FAIL_COUNT {
-			failedServer = append(failedServer, key)
-		}
-        logger.Debugf("map is",val)
+        sum := 0
+        for _, v := range val {
+            sum += v
+        }
+        failedServer[key] = sum
 	}
 	return failedServer
 }
-
-/*
-func (cp *Context) HandleCapacityUpdate() map[string]int {
-    for ser := 
-
-}
-*/
 
 func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[string]VbaEntry {
 	//transfer is complete, so put the change in actual map and send the new config 
