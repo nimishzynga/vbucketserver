@@ -34,6 +34,7 @@ const (
     REP_FAIL_WEIGHT  = 1
     NODE_FAIL_WEIGHT = 3
     FAIL_WEIGHT      = 3*NODE_FAIL_WEIGHT
+    MAX_CKPOINT_DIFF = 2
 )
 
 var logger *log.SysLog
@@ -537,8 +538,10 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
 }
 
 func (cp *Context) VerifyCheckPoints(s int, d int, v int) bool {
-	if cp.S[s].ckPointMap[v] == cp.S[d].ckPointMap[v] == false {
-		logger.Errorf("check point not matching source destination vbucket checkpoints", s, d, v, cp.S[s].ckPointMap[v], cp.S[d].ckPointMap[v])
+    ckdiff := cp.S[s].ckPointMap[v] - cp.S[d].ckPointMap[v]
+	if (cp.S[d].ckPointMap[v] == 0 && ckdiff > 0) || ckdiff > MAX_CKPOINT_DIFF {
+		logger.Errorf("check point not matching source destination vbucket checkpoints",
+            s, d, v, cp.S[s].ckPointMap[v], cp.S[d].ckPointMap[v])
 		return false
 	}
 	return true

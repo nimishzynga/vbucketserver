@@ -230,10 +230,8 @@ func TestReshardDown() {
 }
 
 func HandleDebug() {
-    SetDebug()
     logger.Debugf("%s", "inside handleDebug")
     Ch = make(chan string)
-    debug = true
     time.Sleep(3 *time.Second)
     myMap = make(map[string]*MyConn)
     clientMap= make(map[int]*clientI)

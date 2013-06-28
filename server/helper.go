@@ -82,7 +82,7 @@ func parseInitialConfig(f string, cls *config.Cluster) bool {
 }
 
 func validateConfig(cls *config.Cluster) error {
-	portMap := make(map[int16]bool)
+	portMap := make(map[uint16]bool)
 	for _, cfg := range cls.ConfigMap {
 		if _, ok := portMap[cfg.Port]; ok {
 			return errors.New("Duplcate Port Number for pools in Config")
@@ -220,7 +220,7 @@ func getIpFromConfig(cp *config.Context, sr string) string {
 	return ""
 }
 
-func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
+func (cl *ClientInfo) WaitForPushConfig(co *Client, cp *config.Context) {
     if cl.W != nil {
         return
     }
@@ -235,7 +235,10 @@ func (cl *ClientInfo) WaitForPushConfig(cp *config.Context) {
             }
         case <-time.After((2*HBTIME+5) * time.Second):
             logger.Warnf("Unable to push config/timeing out.so failing node", getIpAddrWithPort(cl.Conn))
-            cp.HandleServerDown([]string{getIpAddrWithPort(cl.Conn)})
+            ok, mp := cp.HandleServerDown([]string{getIpAddrWithPort(cl.Conn)})
+            if ok {
+                PushNewConfig(co, mp, true, cp)
+            }
         }
     }()
     return
@@ -256,7 +259,7 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
                     val.W = nil
                 }
             } else {
-                (&val).WaitForPushConfig(cp)
+                (&val).WaitForPushConfig(co, cp)
             }
         }
     }
@@ -286,7 +289,7 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
                             val.W = nil
                         }
                     } else {
-                        (&val).WaitForPushConfig(cp)
+                        (&val).WaitForPushConfig(co, cp)
                     }
 				}
 				ma[ip] = 1
@@ -387,7 +390,7 @@ func RemoveConn(c net.Conn, co *Client, ct string, cp *config.Context) {
 		co.Vba.Mu.Lock()
 		if val, ok := co.Vba.Ma[ip]; ok && val.Conn == c {
             val.C = nil
-            (&val).WaitForPushConfig(cp)
+            (&val).WaitForPushConfig(co, cp)
 		}
 		co.Vba.Mu.Unlock()
 	}

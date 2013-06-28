@@ -39,8 +39,8 @@ type Cluster struct {
 }
 
 type Config struct {
-	Port         int16
-	Vbuckets     uint16
+	Port         uint16
+	Vbuckets     uint32
 	Replica      int16
 	Hash         string
 	Capacity     int16
@@ -57,7 +57,7 @@ type VbucketServerMap struct {
 }
 
 type VBucketInfo struct {
-	Port int16            `json:"port"`
+	Port uint16           `json:"port"`
 	Name string           `json:"name"`
 	Smap VbucketServerMap `json:"vBucketServerMap"`
 }
