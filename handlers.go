@@ -153,14 +153,18 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			return
 		}
 		logger.Debugf("got cluster name as", c.PathParams["cluster"])
+        if len(si.Server) == 0 {
+		    logger.Warnf("server list is empty in server alive")
+            return
+        }
 		for _, serv := range si.Server {
 			if serv == "" {
-				logger.Debugf("Invalid server in server alive")
+				logger.Warnf("Invalid server in server alive")
 				return
 			}
 			for _, s := range cfgctx.C.Servers {
 				if s == serv {
-					logger.Debugf("Server already in server alive")
+					logger.Warnf("Server already in server alive")
 					return
 				}
 			}
