@@ -538,6 +538,8 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
 }
 
 func (cp *Context) VerifyCheckPoints(s int, d int, v int) bool {
+    s = cp.getPrimaryIndex(s)
+    d = cp.getPrimaryIndex(d)
     ckdiff := cp.S[s].ckPointMap[v] - cp.S[d].ckPointMap[v]
 	if (cp.S[d].ckPointMap[v] == 0 && ckdiff > 0) || ckdiff > MAX_CKPOINT_DIFF {
 		logger.Errorf("check point not matching source destination vbucket checkpoints",
@@ -1144,7 +1146,11 @@ func (cp *Context) DecideServer(f []FailureEntry, failWeight int) map[string]int
 	return failedServer
 }
 
-func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[string]VbaEntry {
+func addEntry(m map[string]int, e VbaEntry) {
+    m[e.Source] = 1
+}
+
+func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[string]int {
 	//transfer is complete, so put the change in actual map and send the new config 
 	cp := cls.GetContext(ip)
 	if cp == nil {
@@ -1152,7 +1158,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
 	}
 	logger.Debugf("In transfer done")
 	serverList := cp.V.Smap.ServerList
-	changeVbaMap := make(map[string]VbaEntry)
+	changeVbaMap := make(map[string]int)
 	vbucketMa := cp.V.Smap.VBucketMap
 	vbucketMaFwd := cp.V.Smap.VBucketMapForward
 	src := cp.getServerIndex(ip)
@@ -1186,7 +1192,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
             } else {
                 oldVbaMap[key] = oldEntry
             }
-            changeVbaMap[key] = oldEntry
+            addEntry(changeVbaMap, oldEntry)
 
 		    vbucket := vbucketMa[vb]
             for k := 1; k < len(vbucket); k++ {
@@ -1207,7 +1213,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                 } else {
                     oldVbaMap[key] = oldEntry
                 }
-                changeVbaMap[key] = oldEntry
+                addEntry(changeVbaMap, oldEntry)
 
                 key := serverList[d] + serverList[vbucket[k]]
                 oldEntry, ok := oldVbaMap[key]
@@ -1216,7 +1222,7 @@ func (cls *Cluster) HandleTransferDone(ip string, dst string, vbl Vblist) map[st
                     oldEntry.Destination = serverList[vbucket[k]]
                 }
                 oldEntry.VbId = append(oldEntry.VbId, vb)
-                changeVbaMap[key] = oldEntry
+                addEntry(changeVbaMap, oldEntry)
                 oldVbaMap[key] = oldEntry
                 vbucketMa[vb][0] = d
             }

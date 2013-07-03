@@ -182,49 +182,40 @@ func (vc *VbaClient) HandleUpdateConfig(cls *config.Cluster) bool {
 
 func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool {
     if m.Status == MSG_OK_STR {
+        cp := cls.GetContext(getIpAddr(vc.conn))
+        logger.Debugf("before contxt got ok from", getIpAddr(vc.conn))
+        if cp == nil {
+            logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
+            return false
+        }
+        logger.Debugf("got ok from", getIpAddr(vc.conn))
+        var ip map[string]int
         if m.Cmd == MSG_CONFIG_STR {
-            cp := cls.GetContext(getIpAddr(vc.conn))
-            logger.Debugf("before contxt got ok from", getIpAddr(vc.conn))
-            if cp == nil {
-                logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
-                return false
-            }
-            logger.Debugf("got ok from", getIpAddr(vc.conn))
-            ip := cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
-            logger.Debugf("ip list is", ip)
-            if len(ip) > 0 {
-                cp.InfoMutex.Lock()
-                logger.Debugf("ip list is 2", ip)
-                if cp.NotifyServers == nil {
-                    cp.NotifyServers = make(map[string]int)
-                    logger.Debugf("notify map is", cp.NotifyServers)
-                    addMap(cp.NotifyServers, ip, cp)
-                    logger.Debugf("notify map is after", cp.NotifyServers)
-                    go func() {
-                        time.Sleep(AGGREGATE_TIME * time.Second)
-                        PushNewConfigToVBA(co, cp.NotifyServers, cp)
-                        logger.Debugf("came up from sleep")
-                        cp.NotifyServers = nil
-                    }()
-                } else {
-                    addMap(cp.NotifyServers, ip, cp)
-                }
-                cp.InfoMutex.Unlock()
-            }
-            return true
+            ip = cp.HandleRestoreCheckPoints(m.Vbuckets, m.CheckPoints, getIpAddr(vc.conn))
+        } else if m.Cmd == MSG_TRANSFER_STR {
+            ip = cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
         }
-        if m.Cmd == MSG_TRANSFER_STR {
-            logger.Debugf("calling HandleTransferDone")
-            cp := cls.GetContext(getIpAddr(vc.conn))
-            if cp == nil {
-                logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
-                return false
+        logger.Debugf("ip list is", ip)
+        if len(ip) > 0 {
+            cp.InfoMutex.Lock()
+            logger.Debugf("ip list is 2", ip)
+            if cp.NotifyServers == nil {
+                cp.NotifyServers = make(map[string]int)
+                logger.Debugf("notify map is", cp.NotifyServers)
+                addMap(cp.NotifyServers, ip, cp)
+                logger.Debugf("notify map is after", cp.NotifyServers)
+                go func() {
+                    time.Sleep(AGGREGATE_TIME * time.Second)
+                    PushNewConfigToVBA(co, cp.NotifyServers, cp)
+                    logger.Debugf("came up from sleep")
+                    cp.NotifyServers = nil
+                }()
+            } else {
+                addMap(cp.NotifyServers, ip, cp)
             }
-            changeMap := cls.HandleTransferDone(getIpAddr(vc.conn), m.Destination, m.Vbuckets)
-            //push config only to VBA
-            go PushNewConfig(co, changeMap, false, cp)
-            return true
+            cp.InfoMutex.Unlock()
         }
+        return true
     }
     if m.Status == MSG_ERROR_STR {
         logger.Debugf("VBA ERROR:", m.Detail)
@@ -298,7 +289,7 @@ func (vc *VbaClient) HandleAlive(cls *config.Cluster, co *Client, m *RecvMsg) bo
 }
 
 func (vc *VbaClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
-	logger.Debugf("inside handleCheckPoint")
+	logger.Debugf("inside handleCheckPoint for ", m.Vbuckets, m.CheckPoints)
 	cp := cls.GetContext(getIpAddr(vc.conn))
 	if cp == nil {
 		logger.Debugf("Not able to find context for", getIpAddr(vc.conn))
