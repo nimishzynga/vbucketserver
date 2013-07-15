@@ -141,7 +141,7 @@ func getConn(i int) (*MyConn) {
 func ReplicationFail() {
         register(4, "CONFIG", func() {
             time.Sleep(4*time.Second)
-            SendToClient(Fail("127.0.0.1:11211"), 4)
+            SendToClient(Fail("127.0.0.11:11211"), 4)
         })
         register(2, "CONFIG", func() {
             time.Sleep(5*time.Second)
@@ -353,7 +353,7 @@ func (c *MyConn)handleRead(m *ConfigVbaMsg) {
     logger.Debugf("got the message :TEST:",m)
     msg := &RecvMsg{}
     if m.Cmd == "INIT" {
-        msg = &RecvMsg{Agent:"VBA",Capacity:3}
+        msg = &RecvMsg{Agent:"MOXI",Capacity:3}
     } else if m.Cmd == MSG_CONFIG_STR {
         for _,g := range m.Data {
             c.m.active = append(c.m.active, g.VbId...)

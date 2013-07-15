@@ -100,9 +100,9 @@ func (mc *MoxiClient) HandleUpdateConfig(cls *config.Cluster) bool {
 
 func (mc *MoxiClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bool {
     logger.Infof("In Handle fail: Moxi failure due to ", m.Cmd)
-	cp := cls.GetContext(getIpAddr(mc.conn))
+	cp := cls.GetContext(m.Destination)
 	if cp == nil {
-		logger.Debugf("Not able to find context for", getIpAddr(mc.conn))
+		logger.Debugf("Not able to find context for", m.Destination)
 		return false
 	}
     fi := &cp.MoxiFi
