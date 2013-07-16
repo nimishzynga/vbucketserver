@@ -206,7 +206,7 @@ func (vc *VbaClient) HandleOk(cls *config.Cluster, co *Client, m *RecvMsg) bool 
                 logger.Debugf("notify map is after", cp.NotifyServers)
                 go func() {
                     time.Sleep(AGGREGATE_TIME * time.Second)
-                    PushNewConfigToVBA(co, cp.NotifyServers, cp)
+                    PushNewConfigAll(co, cp.NotifyServers, cp)
                     logger.Debugf("came up from sleep")
                     cp.NotifyServers = nil
                 }()

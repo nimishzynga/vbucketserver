@@ -71,7 +71,8 @@ const (
 	CLIENT_UNKNOWN = "Unknown"
 	CLIENT_PCNT    = 10
     AGGREGATE_TIME  = 30
-	FAILOVER_TIME    = 60
+	FAIL_CHECK_TIME = 30
+	FAILOVER_TIME   = 120
 )
 
 //return status

@@ -187,10 +187,17 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 
 func checkServerDown(cp *config.Context, co *Client) {
 	//lastNodeFailed := []string{}
+    failtime := FAILOVER_TIME
+    clear := false
 	for {
 		select {
-		case <-time.After(FAILOVER_TIME * time.Second):
-            ok, mp := cp.HandleDown()
+		case <-time.After(FAIL_CHECK_TIME * time.Second):
+            failtime -= FAIL_CHECK_TIME
+            if failtime <= 0 {
+                clear = true
+                failtime = FAILOVER_TIME
+            }
+            ok, mp := cp.HandleDown(clear)
             if ok {
                 PushNewConfig(co, mp, true, cp)
             }
@@ -245,7 +252,7 @@ func (cl *ClientInfo) WaitForPushConfig(co *Client, cp *config.Context) {
 }
 
 //push the config to a VBA
-func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
+func PushNewConfigAll(co *Client, ipl map[string]int, cp *config.Context) {
     co.Vba.Mu.Lock()
     for ip := range ipl {
         ip = cp.GetPrimaryIp(ip)
@@ -264,6 +271,12 @@ func PushNewConfigToVBA(co *Client, ipl map[string]int, cp *config.Context) {
         }
     }
     co.Vba.Mu.Unlock()
+    co.Moxi.Mu.Lock()
+    for ip, val := range co.Moxi.Ma {
+        logger.Infof("Sending config to moxi", ip)
+        val.C <- CHN_NOTIFY_STR
+    }
+    co.Moxi.Mu.Unlock()
 }
 
 //push the config to all the VBA's and Moxi

@@ -1078,21 +1078,27 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 
 //t type of the message
 //vb contains the list of the vbuckets which failed in replication fail
-func (cp *Context) HandleDown() (bool, map[string]VbaEntry) {
+func (cp *Context) HandleDown(clear bool) (bool, map[string]VbaEntry) {
     fi := &cp.NodeFi
     fi.M.Lock()
     NodeFailed := cp.DecideServer(fi.F, NODE_FAIL_WEIGHT)
-    fi.F = fi.F[:0]
+    if clear {
+        fi.F = fi.F[:0]
+    }
     fi.M.Unlock()
     fi = &cp.RepFi
     fi.M.Lock()
     RepFailed := cp.DecideServer(fi.F, REP_FAIL_WEIGHT)
-    fi.F = fi.F[:0]
+    if clear {
+        fi.F = fi.F[:0]
+    }
     fi.M.Unlock()
     fi = &cp.MoxiFi
     fi.M.Lock()
     MoxiFailed := cp.DecideServer(fi.F, MOXI_FAIL_WEIGHT)
-    fi.F = fi.F[:0]
+    if clear {
+        fi.F = fi.F[:0]
+    }
     fi.M.Unlock()
 
     for node,weight := range RepFailed {
