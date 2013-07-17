@@ -18,6 +18,8 @@ package net
 import (
 	"sync"
 	"vbucketserver/config"
+Net "net"
+    "time"
 )
 
 //file contains the struct for client handling
@@ -54,6 +56,9 @@ type RecvMsg struct {
     CheckPoints config.Vblist
     Destination string
     DisksFailed int
+	Data                []config.VbaEntry
+    RestoreCheckPoints  []int
+	HeartBeatTime       int
 }
 
 type InitMsg struct {
@@ -94,3 +99,52 @@ func NewClient() *Client {
 	}
 	return cl
 }
+
+type clientI struct {
+    ip string
+    index int
+    c string
+    p func()
+}
+
+const (
+    CLIENT1 = "127.0.0.1:11211"
+    CLIENT2 = "127.0.0.2:11211"
+    CLIENT3 = "127.0.0.3:11211"
+    CLIENT4 = "127.0.0.4:11211"
+    CLIENT5 = "127.0.0.5:11211"
+    CLIENT6 = "127.0.0.11:11211"
+)
+
+type MetaData struct {
+    state int
+    active []int
+    replica []int
+}
+
+type MyConn struct {
+    w,r chan []byte
+    ip string
+    m *MetaData
+    index int
+    t time.Duration
+    moxi bool
+    Net.Conn
+}
+
+type Conn Net.Conn
+
+type addVbuc struct {
+    l sync.RWMutex
+    vbList []int
+}
+
+type handler interface {
+    handleInit(*MyConn)
+    handleConfig(*RecvMsg, *MyConn)
+}
+
+type moxiClient clientI
+type vbaClient clientI
+
+

@@ -71,29 +71,15 @@ const (
     STATE_CLOSE
 )
 
-type clientI struct {
-    ip string
-    index int
-    c string
-    p func()
-}
-
-const (
-    CLIENT1 = "127.0.0.1:11211"
-    CLIENT2 = "127.0.0.2:11211"
-    CLIENT3 = "127.0.0.3:11211"
-    CLIENT4 = "127.0.0.4:11211"
-    CLIENT5 = "127.0.0.5:11211"
-    CLIENT6 = "127.0.0.11:11211"
-)
-
 var debug bool
-var Ch chan string
+var moxiCh,vbaCh chan string
 var myMap map[string]*MyConn
-var clientMap map[int]*clientI
+var clientMoxiMap map[int]*moxiClient
+var clientVbaMap map[int]*vbaClient
 var totc int
 var M sync.RWMutex
 var logger *log.SysLog
+var addVbucket addVbuc
 
 func SetLogger(l *log.SysLog) {
     logger = l
@@ -103,10 +89,17 @@ type NewListener struct {
     T Net.Listener
 }
 
-func createClient(ip string) {
-    Ch<-ip
-    cl := &clientI { ip,totc, "", nil}
-    clientMap[totc] = cl
+func createMoxiClient(ip string) {
+    moxiCh<-ip
+    cl := &moxiClient{ip, totc, "", nil}
+    clientMoxiMap[totc] = cl
+    time.Sleep(2*time.Second)
+}
+
+func createVbaClient(ip string) {
+    vbaCh<-ip
+    cl := &vbaClient{ ip,totc, "", nil}
+    clientVbaMap[totc] = cl
     time.Sleep(2*time.Second)
 }
 
@@ -125,36 +118,43 @@ func Dead(a []int, r []int) *RecvMsg {
     return m
 }
 
+func getMoxiIp(i int) string {
+    return clientMoxiMap[i].ip
+}
+
+/*returns the vba up*/
 func getIp(i int) string {
-    return clientMap[i].ip
+    return clientVbaMap[i].ip
 }
 
 func register(i int, c string, v func()) {
-    clientMap[i].c = c
-    clientMap[i].p = v
+    clientVbaMap[i].c = c
+    clientVbaMap[i].p = v
 }
 
 func getConn(i int) (*MyConn) {
-    return myMap[clientMap[i].ip]
+    return myMap[clientVbaMap[i].ip]
 }
 
 func ReplicationFail() {
         register(4, "CONFIG", func() {
             time.Sleep(4*time.Second)
-            SendToClient(Fail("127.0.0.11:11211"), 4)
+            SendToClient(Fail("127.0.0.1:11211"), 4)
         })
         register(2, "CONFIG", func() {
             time.Sleep(5*time.Second)
             SendToClient(Fail(getIp(4)), 2)
         })
-        /*
+        register(1, "CONFIG", func() {
+            time.Sleep(5*time.Second)
+            SendToClient(Fail(getIp(4)), 1)
+        })
         register(3, "CONFIG", func() {
             time.Sleep(6*time.Second)
             SendToClient(Fail(getIp(4)), 3)
             time.Sleep(2*time.Second)
             SendToClient(RpFail(getIp(4)), 3)
         })
-        */
 }
 
 func AllDc() {
@@ -213,7 +213,7 @@ func TestAliveFail() {
             c := getConn(1)
             c.handleMyClose()
             time.Sleep(20*time.Second)
-            createClient(CLIENT2)
+            createVbaClient(CLIENT2)
         })
 }
 
@@ -231,16 +231,19 @@ func TestReshardDown() {
 
 func HandleDebug() {
     logger.Debugf("%s", "inside handleDebug")
-    Ch = make(chan string)
+    moxiCh = make(chan string)
+    vbaCh = make(chan string)
     time.Sleep(3 *time.Second)
     myMap = make(map[string]*MyConn)
-    clientMap= make(map[int]*clientI)
-    createClient(CLIENT1)
-    createClient(CLIENT2)
-    createClient(CLIENT3)
-    createClient(CLIENT4)
-    createClient(CLIENT5)
-    //createClient(CLIENT6)
+    clientVbaMap= make(map[int]*vbaClient)
+    clientMoxiMap= make(map[int]*moxiClient)
+    createVbaClient(CLIENT1)
+    createVbaClient(CLIENT2)
+    createVbaClient(CLIENT3)
+    createVbaClient(CLIENT4)
+    createVbaClient(CLIENT5)
+    createMoxiClient(CLIENT1)
+    //createVbaClient(CLIENT6)
     time.Sleep(3 *time.Second)
     ReplicationFail()
    //TestDiskFailure()
@@ -250,7 +253,7 @@ func HandleDebug() {
 }
 
 func SendToClient(data *RecvMsg, i int) {
-    ip := clientMap[i].ip
+    ip := clientVbaMap[i].ip
     m,err := json.Marshal(data)
     if err != nil {
         logger.Debugf("wtf")
@@ -288,11 +291,17 @@ func Listen(protocol string, server string) (Net.Listener, error) {
 func (c NewListener) Accept() (Net.Conn, error) {
     v1 := MyConn{}
     var err1 error
+    var val string
     if debug {
-        val := <-Ch
         w := make(chan []byte, 10)
         r := make(chan []byte)
-        v1 = NewConn(w,r,val, totc)
+        select {
+        case val = <-moxiCh:
+            v1 = NewConn(w,r,val, totc)
+            v1.moxi = true
+        case val = <-vbaCh:
+            v1 = NewConn(w,r,val, totc)
+        }
         totc++
         go v1.handleMyRead()
         go v1.doAlive()
@@ -303,7 +312,6 @@ func (c NewListener) Accept() (Net.Conn, error) {
     }
     return v1,err1
 }
-
 
 func (c MyConn) doAlive() {
     for {
@@ -340,7 +348,7 @@ func (c MyConn) handleMyRead() {
 	for {
          val := <-c.w
          val = <-c.w
-         r := &ConfigVbaMsg{}
+         r := &RecvMsg{}
          err := json.Unmarshal(val, &r)
          if err != nil {
              logger.Debugf("TEST:unmarshal",err)
@@ -349,62 +357,31 @@ func (c MyConn) handleMyRead() {
     }
 }
 
-func (c *MyConn)handleRead(m *ConfigVbaMsg) {
-    logger.Debugf("got the message :TEST:",m)
-    msg := &RecvMsg{}
-    if m.Cmd == "INIT" {
-        msg = &RecvMsg{Agent:"MOXI",Capacity:3}
-    } else if m.Cmd == MSG_CONFIG_STR {
-        for _,g := range m.Data {
-            c.m.active = append(c.m.active, g.VbId...)
+func (c *MyConn)handleRead(m *RecvMsg) {
+    logger.Debugf("got te message :TEST:",m)
+    if c.moxi {
+        cInfo := clientMoxiMap[c.index]
+        if m.Cmd == "INIT" {
+            cInfo.handleInit(c)
+            return
+        } else if m.Cmd == MSG_CONFIG_STR {
+            cInfo.handleConfig(m, c)
+            return
         }
-       addVbucket.l.Lock()
-       addVbucket.vbList = append(addVbucket.vbList, c.m.active...)
-       addVbucket.l.Unlock()
-
-        c.t = time.Duration(m.HeartBeatTime)
-        msg = &RecvMsg{Status: MSG_OK_STR, Cmd: MSG_CONFIG_STR}
-        if m.RestoreCheckPoints != nil {
-            for _,v := range m.RestoreCheckPoints {
-                msg.Vbuckets.Replica = append(msg.Vbuckets.Replica, v)
-                msg.CheckPoints.Replica = append(msg.CheckPoints.Replica, 0)
-            }
+    } else {
+        cInfo := clientVbaMap[c.index]
+        if m.Cmd == "INIT" {
+            cInfo.handleInit(c)
+            return
+        } else if m.Cmd == MSG_CONFIG_STR {
+            cInfo.handleConfig(m, c)
+            return
         }
     }
-    ff := clientMap[c.index]
-    if ff.c != ""{
-        logger.Debugf("calling callback")
-        go ff.p()
-        ff.c = ""
-    }
-    c.handleMyWrite(msg)
-}
-
-type MetaData struct {
-    state int
-    active []int
-    replica []int
-}
-
-type Conn Net.Conn
-type addVbuc struct {
-    l sync.RWMutex
-    vbList []int
-}
-
-var addVbucket addVbuc
-
-type MyConn struct {
-    w,r chan []byte
-    ip string
-    m *MetaData
-    index int
-    t time.Duration
-    Net.Conn
 }
 
 func NewConn(w,r chan []byte, val string, i int) MyConn {
-    v := MyConn{w:w,r:r,ip:val, m:&MetaData{state:STATE_ALIVE}, index:i, t:HBTIME}
+    v := MyConn{w:w,r:r,ip:val, m:&MetaData{state:STATE_ALIVE}, index:i, moxi:false, t:HBTIME}
     return v
 }
 

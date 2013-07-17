@@ -873,6 +873,7 @@ func (cp *Context) AddServerInfo(priIps []string, secIps []string) {
 //TODO:need to protect it by lock
 //need to remove the condition that only active or replica can be moved. Need to handle
 //case when multiple servers are added
+//need to use float for vbucketperserver
 func (cp *Context) HandleServerAlive(ser []string, secIp []string, toAdd bool) (bool, map[string]VbaEntry) {
 	//cp.M.Lock()
 	vbuckets := cp.C.Vbuckets
