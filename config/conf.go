@@ -294,7 +294,7 @@ func (cp *Context) SameServer(index1 int, index2 int) bool {
 }
 
 //return the free server
-func (cp *Context) findFreeServer(s int, s2 []int, s3 []int, lastindex *int) int {
+func (cp *Context) findFreeServer(s []int, s2 []int, s3 []int, lastindex *int) int {
 	var arr []int
 	logger.Debugf("in findFreeServer: s3 is", s3)
 	if len(s3) == 0 {
@@ -305,7 +305,7 @@ func (cp *Context) findFreeServer(s int, s2 []int, s3 []int, lastindex *int) int
 	} else {
 		arr = s3
 	}
-	s2 = append(s2, s)
+	s2 = append(s2, s...)
 	for _, j := range s2 {
 		for k := 0; k < len(arr); k++ {
 			if cp.SameServer(arr[k], j) {
@@ -469,7 +469,7 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 		var j int
 		if vbucket[0] == ser {
 			logger.Debugf("vbucket", vbucket, "j is", j, "ser is", ser)
-			serverIndex := cp.findFreeServer(vbucket[0], []int{ser}, nil, &lastindex)
+			serverIndex := cp.findFreeServer(vbucket, []int{ser}, nil, &lastindex)
 			if serverIndex != -1 {
 				logger.Debugf("j is, new server is", j, serverIndex)
 				key := serverList[serverIndex]
@@ -514,7 +514,7 @@ func (cp *Context) HandleTransferVbuckets(changeVbaMap map[string]VbaEntry, dvi 
                 return
             }
         }()
-        ser := cp.findFreeServer(vbucket[1], failedIndex, allNewIndex, &lastindex)
+        ser := cp.findFreeServer(vbucket, failedIndex, allNewIndex, &lastindex)
         if ser == -1 {
             logger.Errorf("Not enough capacity in destination to transfer vbucket", allNewIndex)
             continue
@@ -659,7 +659,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
 					continue
 				}
 				vbucketMa[dvi.Active[i]][0] = vbucketMa[dvi.Active[i]][k]
-				serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]][0], allFailedIndex,
+				serverIndex := cp.findFreeServer(vbucketMa[dvi.Active[i]], allFailedIndex,
                     allNewIndex, &lastindexActive)
                 if serverIndex == -1 {
                     logger.Fatalf("Not enough capacity")
@@ -745,7 +745,7 @@ func (cp *Context) HandleDeadVbuckets(dvil []DeadVbucketInfo, sl []string, serve
                                 return
                             }
                         }()
-                        serverIndex := cp.findFreeServer(vbucket[0], failedIndex, allNewIndex, &lastindexReplica)
+                        serverIndex := cp.findFreeServer(vbucket, failedIndex, allNewIndex, &lastindexReplica)
                         if serverIndex == -1 {
 							continue
 						}
