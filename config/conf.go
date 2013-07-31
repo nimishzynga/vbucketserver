@@ -33,6 +33,7 @@ const (
     MOXI_FAIL_WEIGHT = 1
     REP_FAIL_WEIGHT  = 1
     NODE_FAIL_WEIGHT = 3
+    VBS_VERIFY_WEIGHT= 2*NODE_FAIL_WEIGHT
     FAIL_WEIGHT      = 3*NODE_FAIL_WEIGHT
     MAX_CKPOINT_DIFF = 2
     INDEX_UNASSIGNED = -1
@@ -465,25 +466,22 @@ func (cp *Context) handleNoReplicaFailure(dvi DeadVbucketInfo, ser int) (bool, m
 				}
 				break
 			}
-		}
-		var j int
-		if vbucket[0] == ser {
-			logger.Debugf("vbucket", vbucket, "j is", j, "ser is", ser)
-			serverIndex := cp.findFreeServer(vbucket, []int{ser}, nil, &lastindex)
-			if serverIndex != -1 {
-				logger.Debugf("j is, new server is", j, serverIndex)
-				key := serverList[serverIndex]
-				oldEntry := oldVbaMap[key]
-				oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
-				changeVbaMap[key] = oldEntry
-				oldVbaMap[key] = oldEntry
-				vbucketMa[dvi.Active[i]][0] = serverIndex
-			} else {
-				logger.Fatalf("CRITICAL:Not enough capacity for active vbuckets")
-				break
-			}
-		}
-	}
+        }
+        logger.Debugf("vbucket ", vbucket, "ser is ", ser)
+        serverIndex := cp.findFreeServer(vbucket, []int{ser}, nil, &lastindex)
+        if serverIndex != -1 {
+            logger.Debugf("j is, new server is", 0, serverIndex)
+            key := serverList[serverIndex]
+            oldEntry := oldVbaMap[key]
+            oldEntry.VbId = append(oldEntry.VbId, dvi.Active[i])
+            changeVbaMap[key] = oldEntry
+            oldVbaMap[key] = oldEntry
+            vbucketMa[dvi.Active[i]][0] = serverIndex
+        } else {
+            logger.Fatalf("CRITICAL:Not enough capacity for active vbuckets")
+            break
+        }
+    }
 	cp.VbaInfo = oldVbaMap
 	logger.Debugf("new vbucket map was", vbucketMa)
 	return true, changeVbaMap
@@ -1079,7 +1077,7 @@ func (cp *Context) HandleRestoreCheckPoints(vbl Vblist, ck Vblist, ip string) ma
 
 //t type of the message
 //vb contains the list of the vbuckets which failed in replication fail
-func (cp *Context) HandleDown(clear bool) (bool, map[string]VbaEntry) {
+func (cp *Context) HandleDown(clear bool, verifyFailFunc func(string, *Context)) (bool, map[string]VbaEntry) {
     fi := &cp.NodeFi
     fi.M.Lock()
     NodeFailed := cp.DecideServer(fi.F, NODE_FAIL_WEIGHT)
@@ -1114,6 +1112,8 @@ func (cp *Context) HandleDown(clear bool) (bool, map[string]VbaEntry) {
     for node,weight := range NodeFailed {
         if weight >= FAIL_WEIGHT {
             NewlyFailedNode = append(NewlyFailedNode, node)
+        } else if weight >= VBS_VERIFY_WEIGHT {
+            go verifyFailFunc(node, cp)
         }
     }
     if len(NewlyFailedNode) > 0 {
@@ -1131,6 +1131,9 @@ func (cp *Context) DecideServer(f []FailureEntry, failWeight int) map[string]int
         if en.Dst == LOCALHOST {
             weight = 2*weight
             en.Dst = en.Src
+        }
+        if en.Verified {
+            weight = FAIL_WEIGHT
         }
         ip := cp.GetPrimaryIp(en.Dst)
         if ip == "" {

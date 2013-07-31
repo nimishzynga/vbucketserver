@@ -418,3 +418,7 @@ func (c MyConn) RemoteAddr() Net.Addr {
 func ( t test) String() string {
     return t.c.ip
 }
+
+func DialTimeout(network, address string, timeout time.Duration) (Conn, error) {
+    return Net.DialTimeout(network, address, timeout)
+}

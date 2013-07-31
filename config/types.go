@@ -144,7 +144,7 @@ type Context struct {
 type FailureEntry struct {
     Src            string
     Dst            string
-    what           int
+    Verified       bool
     vb             Vblist
 }
 

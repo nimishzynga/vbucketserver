@@ -185,6 +185,22 @@ func waitForVBAs(cls *config.Cluster, to int, co *Client) {
 	co.Cond.Broadcast()
 }
 
+func vbsVerifyNode(node string, cp *config.Context) {
+    _, err := net.DialTimeout("tcp", node, 60*time.Second)
+    if err != nil {
+        fi := &cp.MoxiFi
+        fi.M.Lock()
+        entry := config.FailureEntry {
+            Src :      node,
+            Dst :      node,
+            Verified : true,
+        }
+        fi.F = append(fi.F, entry)
+        logger.Debugf("Added the verified failed node entry", entry)
+        fi.M.Unlock()
+    }
+}
+
 func checkServerDown(cp *config.Context, co *Client) {
 	//lastNodeFailed := []string{}
     failtime := FAILOVER_TIME
@@ -197,7 +213,7 @@ func checkServerDown(cp *config.Context, co *Client) {
                 clear = true
                 failtime = FAILOVER_TIME
             }
-            ok, mp := cp.HandleDown(clear)
+            ok, mp := cp.HandleDown(clear, vbsVerifyNode)
             if ok {
                 PushNewConfig(co, mp, true, cp)
             }
