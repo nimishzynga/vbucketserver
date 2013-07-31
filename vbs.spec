@@ -3,7 +3,7 @@
 Summary:      VBS component
 Name:         vbs
 Version:      1.0.0.0
-Release:      17
+Release:      18
 Group:        Development/Languages
 License:      zynga 
 
