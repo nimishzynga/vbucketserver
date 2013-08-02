@@ -159,7 +159,6 @@ func handleConn(conn net.Conn, co *Client, cls *config.Cluster) {
 
 func handleWrite(conn net.Conn, ch chan interface{}) {
 	for data := range ch {
-        logger.Debugf("doing write", data)
         m ,err := conn.Marshal(data)
         if err != nil {
             logger.Warnf("Error in marshalling", err)
