@@ -30,6 +30,7 @@ const (
 	RESHARD_CONT_STR = "In progress"
 	RESHARD_DONE_STR = "No resharding"
     LOCALHOST        = "127.0.0.1:11211"
+    ACTIVE           = "active"
     MOXI_FAIL_WEIGHT = 1
     REP_FAIL_WEIGHT  = 1
     NODE_FAIL_WEIGHT = 3
@@ -37,6 +38,8 @@ const (
     FAIL_WEIGHT      = 3*NODE_FAIL_WEIGHT
     MAX_CKPOINT_DIFF = 2
     INDEX_UNASSIGNED = -1
+    STATE_REPLICA = "Replica"
+    STATE_ACTIVE  = "Active"
 )
 
 var logger *log.SysLog
@@ -1307,6 +1310,33 @@ func (cp *Context) SetReshard() bool {
 	return true
 }
 
+func (cp *Context) createSecondaryIpMap() {
+    vbucketMap := cp.V.Smap.ServerList
+    cp.SecondaryIpMap = make(map[int]int)
+    cfg := cp.C
+    for k,server := range(vbucketMap) {
+        for i,priServers := range(cp.C.Servers) {
+            if priServers == server {
+                if len(cfg.SecondaryIps) > i && cfg.SecondaryIps[i] != "" {
+                    getSecIndex := func(ip string) int {
+                        for j,l := range(vbucketMap) {
+                            if ip == l {
+                                return j
+                            }
+                        }
+                        return -1
+                    }
+                    secIndex := getSecIndex(cfg.SecondaryIps[i])
+                    cp.SecondaryIpMap[k] = secIndex
+                    cp.SecondaryIpMap[secIndex] = k
+                } else {
+                    cp.SecondaryIpMap[k] = -1
+                }
+                break
+            }
+        }
+    }
+}
 
 func (cls *Cluster) GetContext(ip string) *Context {
 	ip = strings.Split(ip, ":")[0]
@@ -1348,4 +1378,28 @@ func (cls *Cluster) AddIpToIpMap(p []string, s []string, c string) {
 	}
 }
 
+func (cls *Cluster) HandleReplicaConfig(conf map[string]*Context) {
+    cls.ContextMap = conf
+	for _, cp := range cls.ContextMap {
+        logger.Debugf("got config map as", cp.V)
+	}
+    for _,cp := range conf {
+        cp.createSecondaryIpMap()
+    }
+}
 
+func (cls *Cluster) IsReplicaVbs() bool {
+    return cls.State == STATE_REPLICA
+}
+
+func (cls *Cluster) IsActiveVbs() bool {
+    return cls.State == STATE_ACTIVE
+}
+
+func (cls *Cluster) PromoteVbs(state string) {
+    if state == STATE_REPLICA {
+        cls.State = STATE_ACTIVE
+        logger.Debugf("Settting state to active")
+    }
+    return
+}

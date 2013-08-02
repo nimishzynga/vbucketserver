@@ -24,6 +24,7 @@ import (
     "os"
 )
 
+
 var logger *log.SysLog
 
 func HandleUpLoadConfig(c *goweb.Context, cls *config.Cluster) {
@@ -229,21 +230,32 @@ func HandleCapacityInfo(c *goweb.Context, cls *config.Cluster) {
 }*/
 
 func createLogger(level int) {
+    if level < 0 {
+        return
+    }
     logger = log.NewSysLog(os.Stdout, "[VBS]", level)
     config.SetLogger(logger)
     server.SetLogger(logger)
     net.SetLogger(logger)
 }
 
-func HandleLogger(c *goweb.Context, cls *config.Cluster) {
+func HandleVbsState(cls *config.Cluster, state string) {
+    if state == "" {
+        return
+    }
+    cls.PromoteVbs(state)
+}
+
+func HandleParams(c *goweb.Context, cls *config.Cluster) {
     if c.IsPost() || c.IsPut() {
-        var si config.Params
+        si := config.Params{ LogLevel:-1,}
         if err := c.Fill(&si); err != nil {
             logger.Warnf("got error", err)
             return
         }
         logger.Infof("Changing log level to ", si.LogLevel)
         createLogger(si.LogLevel)
+        HandleVbsState(cls, si.State)
     }
 }
 
@@ -282,7 +294,7 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
     })
 
     goweb.MapFunc("/{cluster}/setParams", func(c *goweb.Context) {
-		HandleLogger(c, cls)
+		HandleParams(c, cls)
     })
 
     /*

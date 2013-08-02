@@ -18,7 +18,6 @@ package server
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"os"
 net "vbucketserver/net"
 	"time"
@@ -35,6 +34,7 @@ const (
 	STATE_UPDATE_CONFIG
 	STATE_CONFIG_RES_NXT
 	STATE_ALIVE
+    STATE_HB
 )
 
 //msg types and strings
@@ -44,6 +44,8 @@ const (
 	MSG_ALIVE
 	MSG_CAPACITY
 	MSG_CONFIG
+    MSG_REPLICA_VBS
+    MSG_HB
 	MSG_INIT_STR   = "INIT"
 	MSG_OK_STR     = "OK"
 	MSG_ALIVE_STR  = "ALIVE"
@@ -54,11 +56,12 @@ const (
     MSG_TRANSFER_STR = "TRANSFER_DONE"
     MSG_CKPOINT_STR = "CKPOINT"
     MSG_REP_FAIL_STR = "REPLICATION_FAIL"
+    MSG_REPLICA_CONFIG_STR = "REPLICA_CONFIG"
 )
 
 //other constants
 const (
-	RECV_BUF_LEN   = 1024
+	RECV_BUF_LEN   = 1024*10
 	HEADER_SIZE    = 4
 	HBTIME         = 30
 	MAX_TIMEOUT    = 3
@@ -67,6 +70,7 @@ const (
 	CHN_CLOSE_STR  = "CLOSE"
 	CLIENT_VBA     = "VBA"
 	CLIENT_MOXI    = "MOXI"
+	CLIENT_REPLICA_VBS = "REPLICA_VBS"
 	CLIENT_CLI     = "Cli"
 	CLIENT_UNKNOWN = "Unknown"
 	CLIENT_PCNT    = 10
@@ -80,6 +84,7 @@ const (
 	STATUS_INVALID = iota
 	STATUS_CONT
 	STATUS_ERR
+    STATUS_CLOSE_CONN
 	STATUS_SUCCESS
 )
 
@@ -90,31 +95,37 @@ type VbsClient interface {
 	HandleOk(*config.Cluster, *Client, *RecvMsg) bool
 	HandleAlive(*config.Cluster, *Client, *RecvMsg) bool
 	HandleUpdateConfig(*config.Cluster) bool
+	HandleHBSend(*config.Cluster) bool
     HandleCheckPoint(*RecvMsg, *config.Cluster) bool
     HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co *Client) bool
 }
 
 func HandleTcp(c *Client, cls *config.Cluster, s string, confFile string) {
     //parse the conf file
-	if ok := parseInitialConfig(confFile, cls); ok == false {
+    genConfig := true
+    if ok := parseInitialConfig(confFile, cls); ok == false {
 		logger.Fatalf("Unable to parse the config")
 		return
 	}
-	listener, err := net.Listen("tcp", s)
-	if err != nil {
-		logger.Fatalf("error listening:", err.Error())
-		os.Exit(1)
+    if cls.IsReplicaVbs() {
+        genConfig = false
+        HandleReplicaConfig(cls, c)
 	}
-	//wait for VBA's to connect
-	go waitForVBAs(cls, VBA_WAIT_TIME, c)
-	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			logger.Fatalf("Error accept:", err.Error())
-			return
-		}
-		go handleConn(conn, c, cls)
-	}
+    listener, err := net.Listen("tcp", s)
+    if err != nil {
+        logger.Fatalf("error listening:", err.Error())
+        os.Exit(1)
+    }
+    //wait for VBA's to connect
+    go waitForVBAs(cls, VBA_WAIT_TIME, c, genConfig)
+    for {
+        conn, err := listener.Accept()
+        if err != nil {
+            logger.Fatalf("Error accept:", err.Error())
+            return
+        }
+        go handleConn(conn, c, cls)
+    }
 }
 
 func HandleTcpDebug(c *Client, cls *config.Cluster, s string, confFile string) {
@@ -129,7 +140,7 @@ func HandleTcpDebug(c *Client, cls *config.Cluster, s string, confFile string) {
 		os.Exit(1)
 	}
 	//wait for VBA's to connect
-	go waitForVBAs(cls, VBA_WAIT_TIME, c)
+	go waitForVBAs(cls, VBA_WAIT_TIME, c, true)
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -141,18 +152,24 @@ func HandleTcpDebug(c *Client, cls *config.Cluster, s string, confFile string) {
 }
 
 func handleConn(conn net.Conn, co *Client, cls *config.Cluster) {
-	ch := make(chan []byte)
+	ch := make(chan interface{})
 	go handleWrite(conn, ch)
 	handleRead(conn, ch, co, cls)
 }
 
-func handleWrite(conn net.Conn, ch chan []byte) {
-	for m := range ch {
+func handleWrite(conn net.Conn, ch chan interface{}) {
+	for data := range ch {
+        logger.Debugf("doing write", data)
+        m ,err := conn.Marshal(data)
+        if err != nil {
+            logger.Warnf("Error in marshalling", err)
+            return
+        }
 		l := new(bytes.Buffer)
 		var ln int32 = int32(len(m))
 		binary.Write(l, binary.BigEndian, ln)
 		conn.Write(l.Bytes())
-		_, err := conn.Write(m)
+		_, err = conn.Write(m)
 		if err != nil {
             logger.Warnf("Error in write:", err.Error(), " connection ",getIpAddr(conn))
 			return
@@ -160,7 +177,7 @@ func handleWrite(conn net.Conn, ch chan []byte) {
 	}
 }
 
-func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
+func handleRead(conn net.Conn, c chan interface{}, co *Client, cls *config.Cluster) {
 	var state int = STATE_INIT_RES
 	data := []byte{}
 	fullData := []byte{}
@@ -203,7 +220,9 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 		}
 	}()
 
-	SendInitMsg(c)
+    if cls.IsActiveVbs() {
+	    SendInitMsg(c)
+    }
 
 	for {
 		select {
@@ -220,10 +239,15 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 			} else if info == CHN_CLOSE_STR {
 				return
 			}
-		case <-time.After((HBTIME+5) * time.Second):
+		case <-time.After((HBTIME) * time.Second):
+            if cls.IsReplicaVbs() {
+				hasData = true
+                state = STATE_HB
+                break
+            }
 			currTimeouts++
 			logger.Warnf("timeout on socket", getIpAddr(conn))
-			if state != STATE_ALIVE || currTimeouts > MAX_TIMEOUT {
+			if currTimeouts > MAX_TIMEOUT {
 				return
 			}
 			logger.Warnf("timeout on socket", getIpAddr(conn))
@@ -261,16 +285,18 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
 				input := fullData[:length]
 				fullData = fullData[length:]
 				length = 0
-
-				m, err = parseMsg(input)
+				m, err = parseMsg(conn, input)
 				if err != nil {
 					return
 				}
 			}
 
 			if state == STATE_INIT_RES {
+                if cls.IsReplicaVbs() {
+                    m.Agent = CLIENT_REPLICA_VBS
+                }
                 logger.Debugf("got response for init", *m)
-				vc = getClient(m.Agent, conn, c)
+				vc = getClient(m.Agent, conn, c, cls)
 			}
 
 			switch ret := handleMsg(m, conn, &state, c, co, cls, c3, vc); ret {
@@ -278,39 +304,45 @@ func handleRead(conn net.Conn, c chan []byte, co *Client, cls *config.Cluster) {
                 logger.Infof("handleMsg returned error")
 				hasData = false
 				m = nil
-                //return
 			case STATUS_SUCCESS:
 				hasData = false
 				m = nil
+            case STATUS_CLOSE_CONN:
+                return
 			}
 		}
 	}
 }
 
-func parseMsg(b []byte) (*RecvMsg, error) {
+func parseMsg(conn net.Conn ,b []byte) (*RecvMsg, error) {
 	m := &RecvMsg{}
 	var err error
-	if err = json.Unmarshal(b, m); err != nil {
-		logger.Warnf("error in unmarshalling", err)
-	}
+    if err = conn.Unmarshal(b, m); err != nil {
+        logger.Warnf("error in unmarshalling", err)
+    }
 	return m, err
 }
 
-func getClient(ct string, conn net.Conn, ch chan []byte) VbsClient {
+func getClient(ct string, conn net.Conn, ch chan interface{}, cls *config.Cluster) VbsClient {
 	if ct == CLIENT_MOXI {
 		g := &MoxiClient{conn: conn, ch: ch}
 		return g
 	} else if ct == CLIENT_VBA {
 		g := &VbaClient{conn: conn, ch: ch}
 		return g
-	}
+	} else if ct == CLIENT_REPLICA_VBS {
+        g := &ReplicaClient{conn: conn, ch: ch, cls: cls}
+        return g
+    }
+    logger.Warnf("Invalid client type ", ct)
 	g := &GenericClient{}
 	return g
 }
 
-func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan []byte, co *Client,
+func handleMsg(m *RecvMsg, c net.Conn, s *int, ch chan interface{}, co *Client,
 cls *config.Cluster, i chan string, vc VbsClient) int {
     if m != nil {
+        logger.Debugf("Received msg", m)
         if vc != nil {
             if m.Cmd == MSG_FAIL_STR || m.Cmd == MSG_REP_FAIL_STR {
                 vc.HandleFail(m, cls, co)
@@ -323,8 +355,14 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
                 return STATUS_SUCCESS
             } else if m.Cmd == MSG_ALIVE_STR {
                if vc.HandleAlive(cls, co, m) == false {
-                return STATUS_ERR
+                    return STATUS_ERR
                 }
+                return STATUS_SUCCESS
+            } else if m.Cmd == MSG_REPLICA_CONFIG_STR {
+                if cls.IsActiveVbs() {
+                    return STATUS_CLOSE_CONN
+                }
+                handleConfig(cls, m)
                 return STATUS_SUCCESS
             }
         }
@@ -344,12 +382,42 @@ cls *config.Cluster, i chan string, vc VbsClient) int {
             return STATUS_ERR
         }
         *s = STATE_CONFIG_RES
+
+    case STATE_HB:
+        if vc.HandleHBSend(cls) == false {
+            return STATUS_ERR
+        }
+        *s = STATE_CONFIG_RES
     }
     return STATUS_SUCCESS
 }
 
-func SendInitMsg(ch chan []byte) {
+func SendInitMsg(ch chan interface{}) {
 	if m, err := getMsg(MSG_INIT); err == nil {
 		ch <- m
 	}
+}
+
+func HandleReplicaConfig(cls *config.Cluster, c *Client) {
+    for {
+        conn, err := net.DialTimeout("tcp", cls.ActiveIp, 120*time.Second)
+        if err != nil {
+            logger.Debugf("Error in connecting to active VBS")
+            time.Sleep(60*time.Second)
+        } else {
+            handleConn(conn, c, cls)
+        }
+        if cls.IsActiveVbs() {
+            break
+        }
+    }
+}
+
+func handleConfig(cls *config.Cluster, m *RecvMsg) {
+    logger.Debugf("Replica got config before", cls.ContextMap)
+    cls.HandleReplicaConfig(m.Cls)
+    for a,_ := range cls.ContextMap {
+        logger.Debugf("replica config", a)
+    }
+    logger.Debugf("Replica got config after", cls.ContextMap)
 }

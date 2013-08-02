@@ -32,10 +32,11 @@ type ServerInfo struct {
 
 type Cluster struct {
 	ContextMap map[string]*Context //cluster name to context
-	ConfigMap  map[string]Config   //cluster name to config
-	IpMap      map[string]string   //ip addess to cluster name
-    State      int
-	M          sync.RWMutex
+    ConfigMap  map[string]Config  //cluster name to config
+    IpMap      map[string]string  //ip addess to cluster name
+    State      string
+    ActiveIp   string
+    M          sync.RWMutex
 }
 
 type Config struct {
@@ -121,24 +122,27 @@ type ReshardInfo struct {
     dvi *[]DeadVbucketInfo
 }
 
-//Have a map for ips here.
-type Context struct {
-	C               Config       //input Config
+type ConfigInfo struct {
 	V               VBucketInfo  // vbucketMap to send to client
 	S               []ServerInfo // per server information
 	VbaInfo         map[string]VbaEntry
-    SecondaryIpMap  map[int]int
-    FailedNodes     map[string]int
+    C               Config      //input Config
+}
+
+type Context struct {
+    ConfigInfo
+    SecondaryIpMap  map[int]int     `json:"-"`
+    FailedNodes     map[string]int  `json:"-"`
     Maxvbuckets     uint32
     Rebalance       bool
-    NotifyServers   map[string]int
-    NodeFi          FailureInfo
-    RepFi           FailureInfo
-    MoxiFi          FailureInfo
-    T               time.Time
-    Cbi             *callBackInfo
-    ReInfo          ReshardInfo
-	M,InfoMutex     sync.RWMutex
+    NotifyServers   map[string]int  `json:"-"`
+    NodeFi          FailureInfo     `json:"-"`
+    RepFi           FailureInfo     `json:"-"`
+    MoxiFi          FailureInfo     `json:"-"`
+    T               time.Time       `json:"-"`
+    Cbi             *callBackInfo   `json:"-"`
+    ReInfo          ReshardInfo     `json:"-"`
+    M,InfoMutex     sync.RWMutex    `json:"-"`
 }
 
 type FailureEntry struct {
@@ -149,7 +153,8 @@ type FailureEntry struct {
 }
 
 type Params struct {
-    LogLevel int
+    State     string
+    LogLevel  int
 }
 
 func NewContext() *Context {

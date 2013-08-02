@@ -18,6 +18,7 @@ package net
 import (
 	"sync"
 	"vbucketserver/config"
+    "encoding/json"
 Net "net"
     "time"
 )
@@ -129,10 +130,23 @@ type MyConn struct {
     index int
     t time.Duration
     moxi bool
-    Net.Conn
+    Connection
 }
 
-type Conn Net.Conn
+type Connection interface {
+    Net.Conn
+    SetMarshal(string)
+    Marshal(v interface{}) ([]byte, error)
+    Unmarshal(data []byte, v interface{}) error
+}
+
+type NetConn struct {
+    Net.Conn
+    M func(v interface{}) ([]byte, error)
+    U func(data []byte, v interface{}) error
+}
+
+type Conn Connection
 
 type addVbuc struct {
     l sync.RWMutex
@@ -146,5 +160,11 @@ type handler interface {
 
 type moxiClient clientI
 type vbaClient clientI
+
+func NewNetConn(v Net.Conn) *NetConn {
+    return &NetConn{v, json.Marshal, json.Unmarshal}
+}
+
+
 
 

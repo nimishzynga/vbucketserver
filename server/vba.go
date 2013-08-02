@@ -55,6 +55,10 @@ func (gc *GenericClient) HandleUpdateConfig(cp *config.Cluster) bool {
 	return false
 }
 
+func (gc *GenericClient) HandleHBSend(cp *config.Cluster) bool {
+	return false
+}
+
 func (gc *GenericClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
     return false
 }
@@ -65,7 +69,7 @@ func (gc *GenericClient) HandleDeadvBuckets(m *RecvMsg, cls *config.Cluster, co 
 
 type MoxiClient struct {
 	conn net.Conn
-	ch   chan []byte
+	ch  chan interface{}
 	GenericClient
 }
 
@@ -119,7 +123,7 @@ func (mc *MoxiClient) HandleFail(m *RecvMsg, cls *config.Cluster, co *Client) bo
 
 type VbaClient struct {
 	conn net.Conn
-	ch   chan []byte
+	ch   chan interface{}
 	GenericClient
 }
 
@@ -297,4 +301,62 @@ func (vc *VbaClient) HandleCheckPoint(m *RecvMsg, cls *config.Cluster) bool {
 	}
 	cp.HandleCheckPoint(getIpAddr(vc.conn), m.Vbuckets, m.CheckPoints)
     return true
+}
+
+type ReplicaClient struct {
+	conn net.Conn
+    cls *config.Cluster
+	ch  chan interface{}
+	GenericClient
+}
+
+func (rc *ReplicaClient) ClientType() string {
+	return CLIENT_REPLICA_VBS
+}
+
+func (rc *ReplicaClient) HandleInit(ch chan string, cls *config.Cluster, co *Client, c int) bool {
+    if cls.IsReplicaVbs() {
+        //using gob between active and replica
+        //rc.conn.SetMarshal("gob")
+        if m, err := getMsg(MSG_REPLICA_VBS, cls); err == nil {
+            rc.ch <- m
+            return true
+        }
+        return false
+    }
+    logger.Debugf("replica vbs connected")
+	Insert(rc.conn, ch, co, CLIENT_REPLICA_VBS)
+	co.Cond.L.Lock()
+	for co.Started == false {
+		co.Cond.Wait()
+	}
+	co.Cond.L.Unlock()
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_REPLICA_VBS, getIpAddr(rc.conn)); err == nil {
+        logger.Infof("Sending config to vbs ", getIpAddr(rc.conn))
+		rc.ch <- m
+		return true
+	} else {
+        logger.Infof("Error in sending config to vbs ", getIpAddr(rc.conn), err)
+    }
+	return false
+}
+
+func (rc *ReplicaClient) HandleUpdateConfig(cls *config.Cluster) bool {
+	if m, err := getMsg(MSG_CONFIG, cls, HBTIME, CLIENT_REPLICA_VBS, getIpAddr(rc.conn)); err == nil {
+        logger.Infof("Sending config to vbs ", getIpAddr(rc.conn))
+		rc.ch <- m
+		return true
+	} else {
+        logger.Infof("Error in sending config to vbs ", getIpAddr(rc.conn), err)
+    }
+	return false
+}
+
+func (rc *ReplicaClient) HandleHBSend(cp *config.Cluster) bool {
+    if m, err := getMsg(MSG_HB); err == nil {
+        logger.Infof("Sending heartbeat to vbs ", getIpAddr(rc.conn))
+        rc.ch <- m
+        return true
+    }
+    return false
 }

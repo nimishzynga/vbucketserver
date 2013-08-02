@@ -21,6 +21,7 @@ import (
     "vbucketserver/log"
 	"encoding/json"
 	"encoding/binary"
+	"encoding/gob"
     "sync"
     "errors"
     "vbucketserver/config"
@@ -282,13 +283,13 @@ func ListenDebug(protocol string, server string) (NewListener, error) {
     return newListener,nil
 }
 
-func Listen(protocol string, server string) (Net.Listener, error) {
+func Listen(protocol string, server string) (NewListener, error) {
     v, err := Net.Listen(protocol, server)
-    //newListener := NewListener{v}
-    return v,err
+    newListener := NewListener{v}
+    return newListener,err
 }
 
-func (c NewListener) Accept() (Net.Conn, error) {
+func (c NewListener) Accept() (Connection, error) {
     v1 := MyConn{}
     var err1 error
     var val string
@@ -307,8 +308,9 @@ func (c NewListener) Accept() (Net.Conn, error) {
         go v1.doAlive()
         myMap[val]=&v1
     } else {
+        logger.Debugf("before creating connection")
         v, err := c.T.Accept()
-        return v, err
+        return NewNetConn(v), err
     }
     return v1,err1
 }
@@ -419,6 +421,39 @@ func ( t test) String() string {
     return t.c.ip
 }
 
-func DialTimeout(network, address string, timeout time.Duration) (Conn, error) {
-    return Net.DialTimeout(network, address, timeout)
+func DialTimeout(network, address string, timeout time.Duration) (Connection, error) {
+    con, err := Net.DialTimeout(network, address, timeout)
+    return NewNetConn(con), err
+}
+
+func (c *NetConn) SetMarshal(method string) {
+    if method == "gob" {
+        c.M= gobMarshal
+        c.U= gobUnmarshal
+    } else {
+        c.M= json.Marshal
+        c.U= json.Unmarshal
+    }
+}
+
+func (c *NetConn) Marshal(v interface{}) ([]byte, error) {
+    return c.M(v)
+}
+
+func (c *NetConn) Unmarshal(data []byte, v interface{}) error{
+    return c.U(data, v)
+}
+
+func gobMarshal(v interface{}) ([]byte, error) {
+    var network bytes.Buffer
+    enc := gob.NewEncoder(&network)
+    err := enc.Encode(v)
+    return network.Bytes(), err
+}
+
+func gobUnmarshal(data []byte, v interface{}) error {
+    network := bytes.NewBuffer(data)
+    dec := gob.NewDecoder(network)
+    err := dec.Decode(&v)
+    return err
 }

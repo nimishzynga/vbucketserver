@@ -31,6 +31,7 @@ func main() {
 	var cfg = flag.String("config", "/etc/sysconfig/vbucketserver", "Configuration file")
     var debug = flag.String("debug", "false", "VBS unit testing mode")
     var logLevel = flag.Int("log-level", 2, "Log level for VBS")
+    var restPort = flag.String("rest-port", "0:6060", "Rest api port for VBS")
 	flag.Parse()
 
 	goweb.ConfigureDefaultFormatters()
@@ -49,8 +50,8 @@ func main() {
 
     logger.Infof("=======STARTING VBS========")
 	go func() {
-        http.ListenAndServe(":8080", nil)
+        //http.ListenAndServe(":8080", nil)
 	}()
 
-	http.ListenAndServe(":6060", goweb.DefaultHttpHandler)
+	http.ListenAndServe(*restPort, goweb.DefaultHttpHandler)
 }

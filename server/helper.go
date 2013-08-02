@@ -63,19 +63,28 @@ func parseInitialConfig(f string, cls *config.Cluster) bool {
 	buf, err = ioutil.ReadAll(fi)
 	if err != nil {
 		logger.Fatalf("Error in reading inital config file", err)
+        return false
 	}
 
-	if err := json.Unmarshal(buf, &cls.ConfigMap); err != nil {
+	if err := json.Unmarshal(buf, cls); err != nil {
 		logger.Fatalf("Error in unmarshalling config file contents")
+        return false
 	}
 
-	logger.Debugf("Initial Cluster config is ", cls)
+    if cls.IsReplicaVbs() && cls.ActiveIp == "" {
+		logger.Fatalf("Need to specify active VBS ip")
+        return false
+    }
+    logger.Debugf("Initial Cluster config is ", cls)
+
 	cls.M.Lock()
 	if cls.GenerateIpMap() == false {
 		logger.Fatalf("Same server in multiple pools in Config")
+        return false
 	}
 	if err := validateConfig(cls); err != nil {
 		logger.Fatalf(err.Error())
+        return false
 	}
 	cls.M.Unlock()
 	return true
@@ -112,14 +121,14 @@ func validateIp(ip string) bool {
 }
 
 //return the message structure for a message type
-func getMsg(t int, args ...interface{}) ([]byte, error) {
+func getMsg(t int, args ...interface{}) (interface{}, error) {
     logger.Debugf("command type is", t)
-	return func(args []interface{}) ([]byte, error) {
+	return func(args []interface{}) (interface{}) {
 		switch t {
 		case MSG_INIT:
 			m := InitMsg{}
 			m.Cmd = MSG_INIT_STR
-			return json.Marshal(m)
+			return m
 		case MSG_CONFIG:
 			cls, _ := args[0].(*config.Cluster)
 			t, _ := args[1].(int)
@@ -134,8 +143,8 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 				}
 				logger.Debugf("agent is", agent)
 				m := ConfigMsg{Cmd: MSG_CONFIG_STR, Data: data, HeartBeatTime: t}
-				return json.Marshal(m)
-			} else {
+				return m
+			} else if agent == CLIENT_VBA {
 				m := ConfigVbaMsg{Cmd: MSG_CONFIG_STR, HeartBeatTime: t}
 				cp := cls.GetContext(ip)
 				if cp == nil {
@@ -156,29 +165,45 @@ func getMsg(t int, args ...interface{}) ([]byte, error) {
 					}
 				}
                 logger.Debugf("getMsg : config is ",m,ip)
-				return json.Marshal(m)
-			}
+				return m
+			} else {
+			    cls, _ := args[0].(*config.Cluster)
+                logger.Debugf("sending to replica vbs", cls.ContextMap)
+                m := ReplicaMsg{Cmd: MSG_REPLICA_CONFIG_STR, Cls : cls.ContextMap}
+				return m
+            }
+        case MSG_REPLICA_VBS:
+            m := ReplicaMsg{Agent:CLIENT_REPLICA_VBS}
+            return m
+        case MSG_HB:
+            m := InitMsg{Cmd:MSG_ALIVE_STR}
+            return m
 		}
 		//need to fix this here
 		m := InitMsg{}
 		m.Cmd = MSG_INIT_STR
-		return json.Marshal(m)
-	}(args)
+		return m
+	}(args), nil
 }
 
 //wait for VBA's to connect initially
-func waitForVBAs(cls *config.Cluster, to int, co *Client) {
+func waitForVBAs(cls *config.Cluster, to int, co *Client, genConf bool) {
 	time.Sleep(time.Duration(to) * time.Second)
 	logger.Debugf("sleep over for vbas")
 	cls.M.Lock()
 	for key, cfg := range cls.ConfigMap {
 		serverList := cfg.Servers
-		checkVBAs(&cfg, co.Vba)
-		cp := config.NewContext()
-        go checkServerDown(cp, co)  //routine to handle the dead servers
-		cp.GenMap(key, &cfg)
-		cp.C.Servers = serverList
-		cls.ContextMap[key] = cp
+        if genConf {
+		    checkVBAs(&cfg, co.Vba)
+            cp := config.NewContext()
+            go checkServerDown(cp, co)  //routine to handle the dead servers
+            cp.GenMap(key, &cfg)
+            cp.C.Servers = serverList
+            cls.ContextMap[key] = cp
+        } else {
+            cp := cls.ContextMap[key]
+            go checkServerDown(cp, co)  //routine to handle the dead servers
+        }
 	}
 	cls.M.Unlock()
 	co.Started = true
@@ -293,6 +318,12 @@ func PushNewConfigAll(co *Client, ipl map[string]int, cp *config.Context) {
         val.C <- CHN_NOTIFY_STR
     }
     co.Moxi.Mu.Unlock()
+    co.Rep.Mu.Lock()
+    for ip, val := range co.Rep.Ma {
+        logger.Infof("Sending config to vbs replica", ip)
+        val.C <- CHN_NOTIFY_STR
+    }
+    co.Rep.Mu.Unlock()
 }
 
 //push the config to all the VBA's and Moxi
@@ -336,6 +367,12 @@ func PushNewConfig(co *Client, m map[string]config.VbaEntry, toMoxi bool, cp *co
         }
         co.Moxi.Mu.Unlock()
     }
+    co.Rep.Mu.Lock()
+    for ip, val := range co.Rep.Ma {
+        logger.Infof("Sending config to vbs replica", ip)
+        val.C <- CHN_NOTIFY_STR
+    }
+    co.Rep.Mu.Unlock()
 }
 
 //update the servers list with the connected servers
@@ -361,8 +398,8 @@ func checkVBAs(c *config.Config, v ClientInfoMap) {
 	capacity := (len(connectedServs) * 100) / len(c.Servers)
 	if capacity < CLIENT_PCNT {
 		//XXX:May be need to change this panic
-        logger.Fatalf("Not enough server connected, capacity is", capacity)
-        os.Exit(0)
+     //   logger.Fatalf("Not enough server connected, capacity is", capacity)
+      //  os.Exit(0)
 	} else {
 		c.Servers = connectedServs
 		//update the capacity in number of vbuckets
@@ -385,7 +422,7 @@ func Insert(c net.Conn, ch chan string, co *Client, a string) {
 			co.Moxi.Ma[ip].Conn = c
 		}
 		co.Moxi.Mu.Unlock()
-	} else {
+	} else if a == CLIENT_VBA {
 		co.Vba.Mu.Lock()
 		if co.Vba.Ma[ip] == nil {
 			cf := &ClientInfo{C: ch, Conn: c}
@@ -403,7 +440,18 @@ func Insert(c net.Conn, ch chan string, co *Client, a string) {
             }
 		}
 		co.Vba.Mu.Unlock()
-	}
+	} else {
+        co.Rep.Mu.Lock()
+		if co.Rep.Ma[ip] == nil {
+			cf := &ClientInfo{C: ch, Conn: c}
+			co.Rep.Ma[ip] = cf
+		} else {
+			co.Rep.Ma[ip].C <- CHN_CLOSE_STR
+			co.Rep.Ma[ip].C = ch
+			co.Rep.Ma[ip].Conn = c
+		}
+		co.Rep.Mu.Unlock()
+    }
 }
 
 func RemoveConn(c net.Conn, co *Client, ct string, cp *config.Context) {
@@ -424,3 +472,4 @@ func RemoveConn(c net.Conn, co *Client, ct string, cp *config.Context) {
 		co.Vba.Mu.Unlock()
 	}
 }
+

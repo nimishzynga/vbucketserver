@@ -23,6 +23,12 @@ net "vbucketserver/net"
 
 //file contains the struct for client handling
 
+type VbsConfig struct {
+    State       string
+    ActiveIp    string
+    ClusterMap  map[string]config.Config
+}
+
 //information per client structure
 type ClientInfo struct {
 	C     chan string
@@ -41,7 +47,7 @@ type ClientInfoMap struct {
 type Client struct {
 	Started        bool
 	Cond           *sync.Cond
-	Moxi, Vba, Cli ClientInfoMap
+	Moxi, Vba, Rep ClientInfoMap
 }
 
 //parse the client message into it
@@ -56,6 +62,13 @@ type RecvMsg struct {
     CheckPoints config.Vblist
     Destination string
     DisksFailed int
+    Cls     map[string]*config.Context
+}
+
+type ReplicaMsg struct {
+    Agent  string
+    Cmd    string
+    Cls    map[string]*config.Context
 }
 
 type InitMsg struct {
@@ -92,7 +105,7 @@ func NewClient() *Client {
 		Cond:    sync.NewCond(new(sync.Mutex)),
 		Moxi:    NewClientInfoMap(),
 		Vba:     NewClientInfoMap(),
-		Cli:     NewClientInfoMap(),
+		Rep:     NewClientInfoMap(),
 	}
 	return cl
 }
