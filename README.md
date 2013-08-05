@@ -34,5 +34,6 @@ Server can be started using following command:
 
     # /etc/init.d/vbucketserver start
 
-VBA should be started before starting the vbucketserver server on the machines, which are mentions in vbucketconfig. 
+VBA should be started before starting the vbucketserver server on the machines, which are mentioned in vbucketconfig. 
+
 
