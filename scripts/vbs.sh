@@ -49,6 +49,19 @@ stop () {
 	echo "Stopping $prog: "
 }
 
+status (){
+    local pid
+    if [[ -f "$PIDFILE" ]];then
+        read pid < "$PIDFILE"
+        if [[ -n "$pid" && -d "/proc/$pid" ]];then
+            echo "VbucketServer is running.."
+        else
+            echo "VbucketServer is stopped"
+        fi
+    else
+        echo "VbucketServer is stopped"
+    fi
+}
 restart () {
         stop
         start
@@ -63,7 +76,7 @@ case "$1" in
 	stop
 	;;
   status)
-	status -p $PIDFILE $prog
+	status
 	;;
   restart|reload)
 	restart
