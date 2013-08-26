@@ -30,7 +30,7 @@ start () {
       exit 0
     fi
     ${VBS_ROOT}/vbucketserver >> /var/log/vbs.log 2>&1 &
-    
+
     pidbg=$!
     rc=$(ps -aef | grep $prog | wc -l)
 
@@ -49,16 +49,6 @@ stop () {
 	echo "Stopping $prog: "
 }
 
-status() {
-	wc=$(ps -aef | grep $prog | wc -l)
-	if [ $wc -ge 1 ]; then 
-		echo -n "Process is running"
-	else
-		echo -n "Process is stopped"
-	fi
-	echo
-}
-
 restart () {
         stop
         start
@@ -73,7 +63,7 @@ case "$1" in
 	stop
 	;;
   status)
-	status $prog 
+	status -p $PIDFILE $prog
 	;;
   restart|reload)
 	restart
