@@ -147,8 +147,7 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			logger.Warnf("got error", err)
 			return
 		}
-		logger.Debugf("Server:", si.Server)
-		logger.Debugf("SecIp:", si.SecIp)
+		logger.Debugf("Server:", si.Server, "SecIp:", si.SecIp)
 		cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
 		if cfgctx == nil {
 			logger.Debugf("Context not found for", si.Server)
@@ -249,6 +248,7 @@ func removeDuplicateIps(ip *[]string) {
 		if !found[serv] {
 			found[serv] = true
 			(*ip)[j] = (*ip)[i]
+			j++
 		}
 	}
 	(*ip) = (*ip)[:j]
