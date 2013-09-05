@@ -16,14 +16,13 @@ limitations under the License.
 package main
 
 import (
+	"os"
+	"vbucketserver/config"
 	"vbucketserver/goweb"
 	"vbucketserver/log"
-	"vbucketserver/config"
-	"vbucketserver/server"
 	"vbucketserver/net"
-    "os"
+	"vbucketserver/server"
 )
-
 
 var logger *log.SysLog
 
@@ -80,7 +79,7 @@ func HandleDeadvBuckets(c *goweb.Context, cls *config.Cluster, co *server.Client
 
 func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) {
 	if c.IsPost() || c.IsPut() {
-        logger.Infof("ServerDown api called")
+		logger.Infof("ServerDown api called")
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			logger.Warnf("got error", err)
@@ -108,7 +107,7 @@ func HandleServerDown(c *goweb.Context, cls *config.Cluster, co *server.Client) 
 
 func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client) {
 	if c.IsPost() || c.IsPut() {
-        logger.Infof("ReshardDown api called")
+		logger.Infof("ReshardDown api called")
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			logger.Warnf("got error", err)
@@ -125,7 +124,7 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 			logger.Debugf("Context not found for", si.Server)
 			return
 		}
-        if cfgctx.SetReshard() == false {
+		if cfgctx.SetReshard() == false {
 			data := "Reshard is already going on.Please try later"
 			c.WriteResponse(data, 200)
 			return
@@ -136,28 +135,31 @@ func HandleReshardDown(c *goweb.Context, cls *config.Cluster, co *server.Client)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
 		}
-	    c.WriteResponse("SUCCESS", 200)
+		c.WriteResponse("SUCCESS", 200)
 	}
 }
 
 func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client) {
 	if c.IsPost() || c.IsPut() {
-	    logger.Infof("ServerALive api called")
+		logger.Infof("ServerALive api called")
 		var si config.ServerUpDownInfo
 		if err := c.Fill(&si); err != nil {
 			logger.Warnf("got error", err)
 			return
 		}
+		logger.Debugf("Server:", si.Server, "SecIp:", si.SecIp)
 		cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
 		if cfgctx == nil {
 			logger.Debugf("Context not found for", si.Server)
 			return
 		}
 		logger.Debugf("got cluster name as", c.PathParams["cluster"])
-        if len(si.Server) == 0 {
-		    logger.Warnf("server list is empty in server alive")
-            return
-        }
+		if len(si.Server) == 0 {
+			logger.Warnf("server list is empty in server alive")
+			return
+		}
+		removeDuplicateIps(&si.Server)
+		removeDuplicateIps(&si.SecIp)
 		for _, serv := range si.Server {
 			if serv == "" {
 				logger.Warnf("Invalid server in server alive")
@@ -170,8 +172,8 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 				}
 			}
 		}
-        logger.Infof("added server is", si.Server)
-        if cfgctx.SetReshard() == false {
+		logger.Infof("added server is", si.Server)
+		if cfgctx.SetReshard() == false {
 			data := "Reshard is going on.Please try later"
 			c.WriteResponse(data, 200)
 			return
@@ -182,7 +184,7 @@ func HandleServerAlive(c *goweb.Context, cls *config.Cluster, co *server.Client)
 		if ok {
 			server.PushNewConfig(co, mp, true, cfgctx)
 		}
-	    c.WriteResponse("SUCCESS", 200)
+		c.WriteResponse("SUCCESS", 200)
 	}
 }
 
@@ -204,10 +206,10 @@ func HandleCapacityUpdate(c *goweb.Context, cls *config.Cluster) {
 
 func HandleReshardStatus(c *goweb.Context, cls *config.Cluster) {
 	cfgctx := cls.GetContextFromClusterName(c.PathParams["cluster"])
-		if cfgctx == nil {
-            logger.Warnf("HandleReshardStatus :Context not found")
-			return
-	    }
+	if cfgctx == nil {
+		logger.Warnf("HandleReshardStatus :Context not found")
+		return
+	}
 	status := cfgctx.GetReshardStatus()
 	c.WriteResponse(status, 200)
 }
@@ -230,33 +232,46 @@ func HandleCapacityInfo(c *goweb.Context, cls *config.Cluster) {
 }*/
 
 func createLogger(level int) {
-    if level < 0 {
-        return
-    }
-    logger = log.NewSysLog(os.Stdout, "[VBS]", level)
-    config.SetLogger(logger)
-    server.SetLogger(logger)
-    net.SetLogger(logger)
+	if level < 0 {
+		return
+	}
+	logger = log.NewSysLog(os.Stdout, "[VBS]", level)
+	config.SetLogger(logger)
+	server.SetLogger(logger)
+	net.SetLogger(logger)
+}
+
+func removeDuplicateIps(ip *[]string) {
+	found := make(map[string]bool)
+	j := 0
+	for i, serv := range *ip {
+		if !found[serv] {
+			found[serv] = true
+			(*ip)[j] = (*ip)[i]
+			j++
+		}
+	}
+	(*ip) = (*ip)[:j]
 }
 
 func HandleVbsState(cls *config.Cluster, state string) {
-    if state == "" {
-        return
-    }
-    cls.PromoteVbs(state)
+	if state == "" {
+		return
+	}
+	cls.PromoteVbs(state)
 }
 
 func HandleParams(c *goweb.Context, cls *config.Cluster) {
-    if c.IsPost() || c.IsPut() {
-        si := config.Params{ LogLevel:-1,}
-        if err := c.Fill(&si); err != nil {
-            logger.Warnf("got error", err)
-            return
-        }
-        logger.Infof("Changing log level to ", si.LogLevel)
-        createLogger(si.LogLevel)
-        HandleVbsState(cls, si.State)
-    }
+	if c.IsPost() || c.IsPut() {
+		si := config.Params{LogLevel: -1}
+		if err := c.Fill(&si); err != nil {
+			logger.Warnf("got error", err)
+			return
+		}
+		logger.Infof("Changing log level to ", si.LogLevel)
+		createLogger(si.LogLevel)
+		HandleVbsState(cls, si.State)
+	}
 }
 
 func SetupHandlers(cls *config.Cluster, co *server.Client) {
@@ -291,16 +306,14 @@ func SetupHandlers(cls *config.Cluster, co *server.Client) {
 
 	goweb.MapFunc("/{cluster}/reshardStatus", func(c *goweb.Context) {
 		HandleReshardStatus(c, cls)
-    })
+	})
 
-    goweb.MapFunc("/{cluster}/setParams", func(c *goweb.Context) {
+	goweb.MapFunc("/{cluster}/setParams", func(c *goweb.Context) {
 		HandleParams(c, cls)
-    })
+	})
 
-    /*
-    goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
-        HandleCapacityInfo(c, cls)
-    }))*/
+	/*
+	   goweb.MapFunc("/{cluster}/capacityInfo", func(c *goweb.Context) {
+	       HandleCapacityInfo(c, cls)
+	   }))*/
 }
-
-
